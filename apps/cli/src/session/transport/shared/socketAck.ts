@@ -90,7 +90,26 @@ export async function emitSocketWithAck<T = unknown>(params: Readonly<{
     return await withLocalAckDeadline({
         event: params.event,
         timeoutMs,
-        operation: async () => await socketWithTimeout.emitWithAck(params.event, params.payload) as T,
+        operation: async () => {
+            try {
+                return await socketWithTimeout.emitWithAck(params.event, params.payload) as T;
+            } catch (error) {
+                // Socket.IO's timer can win the race with our deadline and rejects with
+                // an untyped Error. Preserve the same retry contract whichever timer wins:
+                // accepted-input settlement retries its exact identity, never provider input.
+                if (error instanceof Error && error.message === 'operation has timed out') {
+                    const timeout = createSocketAckError({
+                        code: 'socket_ack_timeout',
+                        event: params.event,
+                        message: `${params.event} ack timed out after ${timeoutMs}ms`,
+                        timeoutMs,
+                    });
+                    timeout.cause = error;
+                    throw timeout;
+                }
+                throw error;
+            }
+        },
     });
 }
 
