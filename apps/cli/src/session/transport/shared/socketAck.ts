@@ -1,3 +1,5 @@
+import { isSocketIoAckTimeoutError } from '@happier-dev/protocol/rpcErrors';
+
 import { resolveSessionControlSocketAckTimeoutMs } from './sessionTimeouts';
 
 export type SocketAckError = Error & Readonly<{
@@ -94,10 +96,9 @@ export async function emitSocketWithAck<T = unknown>(params: Readonly<{
             try {
                 return await socketWithTimeout.emitWithAck(params.event, params.payload) as T;
             } catch (error) {
-                // Socket.IO's timer can win the race with our deadline and rejects with
-                // an untyped Error. Preserve the same retry contract whichever timer wins:
-                // accepted-input settlement retries its exact identity, never provider input.
-                if (error instanceof Error && error.message === 'operation has timed out') {
+                // Socket.IO registers its timer during emit, before our local deadline.
+                // Normalize response loss so settlement retries its exact accepted identity.
+                if (isSocketIoAckTimeoutError(error)) {
                     const timeout = createSocketAckError({
                         code: 'socket_ack_timeout',
                         event: params.event,
