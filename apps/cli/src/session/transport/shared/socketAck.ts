@@ -78,6 +78,7 @@ async function withLocalAckDeadline<T>(params: Readonly<{
     }
 }
 
+/** Emit an ACK request with one deadline and retryable transport timeout errors. */
 export async function emitSocketWithAck<T = unknown>(params: Readonly<{
     socket: EmitWithAckSocket;
     event: string;

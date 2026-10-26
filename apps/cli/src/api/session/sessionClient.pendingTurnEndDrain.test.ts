@@ -1,3 +1,6 @@
+import { createServer } from 'node:http';
+import { Server } from 'socket.io';
+import { io } from 'socket.io-client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 
@@ -13,7 +16,11 @@ import {
   resolveApiSessionSocketDefaultAck,
 } from '@/testkit/backends/apiSessionSocketHarness';
 import { encodeBase64, encrypt } from '../encryption';
-import { accountSettingsParse } from '@happier-dev/protocol';
+import {
+  accountSettingsParse,
+  type AcceptedPendingSettlementRequestV1,
+  type AcceptedPendingSettlementResponseV1,
+} from '@happier-dev/protocol';
 import {
   getActiveAccountSettingsSnapshot,
   setActiveAccountSettingsSnapshot,
@@ -2479,6 +2486,84 @@ describe('ApiSessionClient pending-queue turn-end drain', () => {
     expect(resolveAcceptedPendingDeliveryMock).toHaveBeenCalledTimes(3);
     expect((client as any).canonicalPendingDeliveryByLocalId.has('bounded-rejoin-local')).toBe(false);
     expect(materializeNextMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('automatically settles a real Socket.IO ACK timeout without replaying input or reconnecting', async () => {
+    const actualTransport = await vi.importActual<typeof import('./pendingQueueV2Transport')>('./pendingQueueV2Transport');
+    resolveAcceptedPendingDeliveryMock.mockImplementation(actualTransport.resolveAcceptedPendingQueueV2Delivery);
+    const http = createServer();
+    const server = new Server(http);
+    await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+    const address = http.address();
+    if (!address || typeof address === 'string') throw new Error('Missing loopback server');
+    const wire = io(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], forceNew: true, reconnection: false });
+    const received: string[] = [];
+    const committed = new Set<string>();
+    let connections = 0;
+    const first = createProviderDeliveryMaterializeResult('accepted-before-wire-timeout');
+    server.on('connection', (socket) => {
+      connections += 1;
+      socket.on('pending-delivery-accepted-v1', (request: AcceptedPendingSettlementRequestV1, ack: (response: AcceptedPendingSettlementResponseV1) => void) => {
+        received.push(request.localId);
+        committed.add(request.localId);
+        // Commit once, lose the first reply, then replay exact committed proof.
+        if (received.length > 1) ack({
+          ok: true, didResolve: false,
+          message: {
+            id: 'committed-wire-timeout', seq: 43, localId: first.localId,
+            messageRole: 'user', content: first.message.content,
+            createdAt: 1000, updatedAt: 1000,
+          },
+          pendingCount: 1, pendingBlockedCount: 0, pendingVersion: 4,
+        });
+      });
+    });
+    let client: Awaited<ReturnType<typeof createClient>> | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        wire.once('connect', resolve);
+        wire.once('connect_error', reject);
+      });
+      client = await createClient({
+        latestTurnStatus: 'completed', pendingCount: 2, pendingVersion: 1,
+        metadata: { deliveredUserMessageSeqV1: 0 },
+      }, {
+        sessionSocketEmitWithAck: (event, payload) => {
+          if (event !== 'pending-delivery-accepted-v1') return undefined;
+          // Make the real library timer win deterministically over the outer
+          // deadline; leave the emitter, parser, and automatic retry loop real.
+          return wire.timeout(30).emitWithAck(event, payload);
+        },
+      });
+      await waitForCurrentPendingInputContract(client);
+      const delivered: string[] = [];
+      client.onUserMessage((message) => delivered.push(message.content.text));
+      materializeNextMock
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce(createProviderDeliveryMaterializeResult('next-after-wire-timeout', 5));
+      await client.materializeNextPendingMessageSafely({ reconcileWhenEmpty: 'force' });
+      confirmProviderInputAccepted(client, first.localId);
+
+      await vi.waitFor(() => expect(client!.hasCanonicalPendingProviderInputDelivery(first.localId)).toBe(false), { timeout: 3_000 });
+      expect(received).toEqual([first.localId, first.localId]);
+      expect([...committed]).toEqual([first.localId]);
+      expect(client.getCommittedUserMessageSeq(first.localId)).toBe(43);
+      expect(delivered).toEqual([`prompt ${first.localId}`]);
+      expect(materializeNextMock).toHaveBeenCalledTimes(1);
+      await expect(client.materializeNextPendingMessageSafely({ reconcileWhenEmpty: 'force' })).resolves.toMatchObject({
+        type: 'materialized', localId: 'next-after-wire-timeout',
+      });
+      expect(delivered).toEqual([`prompt ${first.localId}`, 'prompt next-after-wire-timeout']);
+      expect(connections).toBe(1);
+      expect(wire.connected).toBe(true);
+      expect(sessionSocketStub?.disconnect).not.toHaveBeenCalled();
+      expect(sessionSocketStub?.close).not.toHaveBeenCalled();
+    } finally {
+      client?.beginRuntimeTermination();
+      wire.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (http.listening) await new Promise<void>((resolve) => http.close(() => resolve()));
+    }
   });
 
   it('recovers internal settlement ACKs and drains the next row without replaying accepted provider input', async () => {
