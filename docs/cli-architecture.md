@@ -79,7 +79,9 @@ This is development source behavior, not a released-channel guarantee.
 
 The shared `session/transport/shared/socketAck` boundary normalizes Socket.IO's
 untyped acknowledgment timeout into the same typed, retryable error used by its
-local deadline. Either timer can expire first. Accepted-input settlement then
+local deadline. Socket.IO registers its timer during emit, before the local
+deadline with the same delay. Both CLI normalization and UI timeout handling use
+the classifier in `@happier-dev/protocol/rpcErrors`. Accepted-input settlement then
 uses its existing retry loop on the same local id, without replaying provider
 input or waiting for a reconnect. Other errors retain their original meaning;
 no timeout budget, wire format, or acceptance authority changes. This correction

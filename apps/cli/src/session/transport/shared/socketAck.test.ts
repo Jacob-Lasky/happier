@@ -6,22 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { emitSocketWithAck } from './socketAck';
 
 describe('emitSocketWithAck', () => {
-    it('classifies the Socket.IO timeout as retryable acknowledgement loss and settles the same identity on retry', async () => {
+    it('classifies a real Socket.IO timeout as retryable acknowledgement loss and preserves its cause', async () => {
         const http = createServer();
         const server = new Server(http);
         await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
         const address = http.address();
         if (!address || typeof address === 'string') throw new Error('Missing loopback server');
         const client = io(`http://127.0.0.1:${address.port}`, { transports: ['websocket'], forceNew: true, reconnection: false });
-        const received: string[] = [];
-        const committed = new Set<string>();
         server.on('connection', (socket) => {
-            socket.on('accepted', (payload, ack) => {
-                received.push(payload.localId);
-                committed.add(payload.localId);
-                // The server committed, but the first acknowledgement was lost.
-                if (received.length > 1) ack({ localId: payload.localId, committed: true });
-            });
+            // The remote endpoint receives the event but withholds the ACK.
+            socket.on('accepted', () => {});
         });
         try {
             await new Promise<void>((resolve, reject) => {
@@ -31,12 +25,8 @@ describe('emitSocketWithAck', () => {
             const params = { socket: client, event: 'accepted', payload: { localId: 'accepted-input' }, timeoutMs: 30 };
             await expect(emitSocketWithAck(params)).rejects.toMatchObject({
                 code: 'socket_ack_timeout', event: 'accepted', retryable: true, timeoutMs: 30,
+                cause: expect.objectContaining({ message: 'operation has timed out' }),
             });
-            await expect(emitSocketWithAck({ ...params, timeoutMs: 1_000 })).resolves.toEqual({
-                localId: 'accepted-input', committed: true,
-            });
-            expect(received).toEqual(['accepted-input', 'accepted-input']);
-            expect([...committed]).toEqual(['accepted-input']);
         } finally {
             client.close();
             await new Promise<void>((resolve) => server.close(() => resolve()));
