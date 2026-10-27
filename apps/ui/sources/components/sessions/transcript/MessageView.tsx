@@ -28,6 +28,7 @@ import { Text } from '@/components/ui/text/Text';
 import { useMessageStructuredReferences } from '@/components/sessions/transcript/references/messageStructuredReferences';
 import { StructuredReferencesRow } from '@/components/sessions/transcript/references/StructuredReferencesRow';
 import { useTranscriptMotion } from '@/components/sessions/transcript/motion/TranscriptMotionContext';
+import { PeerMessageRow } from '@/components/sessions/transcript/peer/PeerMessageRow';
 import { ThinkingTimelineRow } from '@/components/sessions/transcript/thinking/ThinkingTimelineRow';
 import { TranscriptEventRow } from '@/components/sessions/transcript/events/TranscriptEventRow';
 import { transcriptMarkdownTextStyle } from '@/components/sessions/transcript/transcriptMarkdownTypography';
@@ -1191,6 +1192,7 @@ function AgentTextBlock(props: {
     motion?.config.preset !== 'off' &&
     props.historical !== true &&
     isStructuredOnly !== true &&
+    props.message.peer === undefined &&
     (streamSegmentMeta ? streamSegmentAssistantStreaming === true : true);
   const streaming = useStreamingTextSmoothing({
     enabled: streamingSmoothingEligible,
@@ -1341,6 +1343,25 @@ function AgentTextBlock(props: {
                 >
                   {streaming.displayText}
                 </Text>
+              ) : props.message.peer ? (
+                <PeerMessageRow
+                  id={props.message.id}
+                  createdAt={props.message.createdAt}
+                  peer={props.message.peer}
+                  summary={deriveThinkingSummary(markdown)}
+                >
+                  <MarkdownView
+                    markdown={markdown}
+                    codeBlockStateKey={JSON.stringify([props.sessionId, props.message.id])}
+                    agentTexMath
+                    onOptionPress={handleOptionPress}
+                    onOptionLongPress={handleOptionLongPress}
+                    onLinkPress={handleMarkdownLinkPress}
+                    selectable={true}
+                    profile="transcript"
+                    textStyle={styles.transcriptMarkdownText}
+                  />
+                </PeerMessageRow>
               ) : (
                 <MarkdownView
                   {...quoteMarkdownProps}

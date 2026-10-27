@@ -42,6 +42,7 @@ import type {
 } from './sessionListRowModelTypes';
 import type { SessionListRowStoreSubscriptionMode } from './sessionListVisibleRowStoreScopes';
 import type { SessionItemProps } from '../SessionItem';
+import type { SessionWorkspacePresentationMetadata } from '@/sync/domains/session/listing/sessionWorkspacePresentation';
 
 const EMPTY_SESSION_LIST_ROW_STORE_STATE: SessionListRowStoreState = Object.freeze({});
 
@@ -69,6 +70,7 @@ export type SessionListRowModelBoundaryProps = Readonly<{
     getRowNativeContextMenuOpenChangeHandler: (sessionKey: string) => (next: boolean) => void;
     getRowSetTagsHandler: (sessionKey: string) => (newTags: string[]) => void;
     getRowTogglePinnedHandler: (sessionKey: string) => () => void;
+    onSetSessionAppearance?: SessionItemProps['onSetSessionAppearance'];
     groupKey: string;
     item: SessionListRowSessionItem;
     nativeContextMenuSessionKey: string | null;
@@ -127,9 +129,10 @@ function readSessionListRowStoreStateOnce(input: Readonly<{
     activeServerId?: string | null;
     serverId?: string | null;
     sessionId: string;
+    metadata?: SessionWorkspacePresentationMetadata;
 }>): SessionListRowStoreState {
     const selector = createSessionListRowStoreStateSelector(
-        [{ sessionId: input.sessionId, serverId: input.serverId ?? null }],
+        [{ sessionId: input.sessionId, serverId: input.serverId ?? null, metadata: input.metadata }],
         input.activeServerId,
     );
     return selector(storage.getState());
@@ -148,16 +151,17 @@ function useSessionListRowStoreState(input: Readonly<{
     enabled: boolean;
     serverId?: string | null;
     sessionId: string;
+    metadata?: SessionWorkspacePresentationMetadata;
 }>): SessionListRowStoreState {
-    const { activeServerId, enabled, serverId, sessionId } = input;
+    const { activeServerId, enabled, serverId, sessionId, metadata } = input;
     const readRowStoreState = React.useMemo(() => {
         if (!enabled) return readEmptyRowStoreState;
         const selector = createSessionListRowStoreStateSelector(
-            [{ sessionId, serverId: serverId ?? null }],
+            [{ sessionId, serverId: serverId ?? null, metadata }],
             activeServerId,
         );
         return () => selector(storage.getState());
-    }, [activeServerId, enabled, serverId, sessionId]);
+    }, [activeServerId, enabled, serverId, sessionId, metadata]);
 
     return React.useSyncExternalStore(
         enabled ? storage.subscribe : subscribeToNoRowStoreUpdates,
@@ -178,6 +182,7 @@ export const SessionListRowModelBoundary = React.memo(function SessionListRowMod
         enabled: props.rowStoreSubscriptionEnabled,
         serverId: props.item.serverId,
         sessionId: props.item.session.id,
+        metadata: props.item.session.metadata,
     });
     const liveDraftProjection = useExistingSessionDraftProjection({
         enabled: props.rowStoreSubscriptionEnabled,
@@ -203,6 +208,7 @@ export const SessionListRowModelBoundary = React.memo(function SessionListRowMod
             activeServerId: props.activeServerId,
             serverId: props.item.serverId,
             sessionId: props.item.session.id,
+            metadata: props.item.session.metadata,
         });
         frozenDraftProjectionRef.current = draftScope
             ? getExistingSessionDraftProjection(draftScope, props.item.session.id)
@@ -333,6 +339,7 @@ const SessionListRowModelBoundaryContent = React.memo(function SessionListRowMod
             allKnownTags={rowModel.allKnownTags}
             onSetTags={onSetTags}
             tagsEnabled={rowModel.tagsEnabled}
+            onSetSessionAppearance={props.onSetSessionAppearance}
             selected={rowModel.isSelected}
             isFirst={rowModel.adjacency.isFirst}
             isLast={rowModel.adjacency.isLast}

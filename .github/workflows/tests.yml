@@ -321,6 +321,8 @@ jobs:
               - 'packages/tests/src/testkit/process/**'
             installers_smoke:
               - 'packages/cli-common/src/service/**'
+              - 'packages/cli-common/native/windows/**'
+              - 'scripts/pipeline/release/build-windows-service-launcher.mjs'
               - 'apps/cli/src/daemon/service/**'
               - '.github/actions/bootstrap-minisign/**'
               - 'apps/ui/src-tauri/**'
@@ -391,9 +393,49 @@ jobs:
             node --test scripts/release/release_notes_projection.contract.test.mjs
           fi
 
-  build-cli:
-    if: ${{ (inputs.select_jobs_explicitly && (inputs.run_cli || inputs.run_cli_daemon_e2e || inputs.run_e2e_core || inputs.run_e2e_core_slow || inputs.run_binary_smoke || (inputs.run_installers_smoke && inputs.installers_source == 'local-build'))) || (!inputs.select_jobs_explicitly && (needs.ci_plan.outputs.run_cli == 'true' || needs.ci_plan.outputs.run_cli_daemon_e2e == 'true' || needs.ci_plan.outputs.run_e2e_core == 'true' || needs.ci_plan.outputs.run_binary_smoke == 'true' || needs.ci_plan.outputs.run_installers_smoke == 'true')) }}
+  build-windows-service-launcher:
+    # Windows x64 CLI payloads carry the native service launcher, which only an MSVC host can
+    # compile. Built only when build-cli builds Windows payloads (its BUILD_INSTALLER_BINARIES).
+    if: ${{ (inputs.select_jobs_explicitly && inputs.run_installers_smoke && inputs.installers_source == 'local-build') || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_installers_smoke == 'true' && !((github.event_name == 'push' && github.ref_name == 'main') || (github.event_name == 'pull_request' && github.base_ref == 'main'))) }}
     needs: [ci_plan, trusted_ref_guard]
+    name: Windows service launcher
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.checkout_sha != '' && inputs.checkout_sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact requested checkout SHA
+        if: ${{ inputs.checkout_sha != '' }}
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ inputs.checkout_sha }}
+        run: test "$(git rev-parse HEAD)" = "$CHECKOUT_SHA"
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - name: Compile x64 GUI launcher with the installed MSVC toolchain
+        shell: cmd
+        run: call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 && node scripts\pipeline\release\build-windows-service-launcher.mjs
+      - name: Test launcher lifecycle in an isolated fixture
+        shell: pwsh
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File packages/cli-common/native/windows/service-launcher.test.ps1
+      - name: Upload launcher for Windows payloads
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-service-launcher-${{ inputs.checkout_sha != '' && inputs.checkout_sha || github.sha }}
+          path: packages/cli-common/native/windows/bin/windows-x64/happier-service-launcher.exe
+          if-no-files-found: error
+          retention-days: 2
+
+  build-cli:
+    if: ${{ !cancelled() && needs.ci_plan.result == 'success' && needs.trusted_ref_guard.result == 'success' && (needs.build-windows-service-launcher.result == 'success' || needs.build-windows-service-launcher.result == 'skipped') && ((inputs.select_jobs_explicitly && (inputs.run_cli || inputs.run_cli_daemon_e2e || inputs.run_e2e_core || inputs.run_e2e_core_slow || inputs.run_binary_smoke || (inputs.run_installers_smoke && inputs.installers_source == 'local-build'))) || (!inputs.select_jobs_explicitly && (needs.ci_plan.outputs.run_cli == 'true' || needs.ci_plan.outputs.run_cli_daemon_e2e == 'true' || needs.ci_plan.outputs.run_e2e_core == 'true' || needs.ci_plan.outputs.run_binary_smoke == 'true' || needs.ci_plan.outputs.run_installers_smoke == 'true'))) }}
+    needs: [ci_plan, trusted_ref_guard, build-windows-service-launcher]
     name: build-cli
     runs-on: ${{ needs.trusted_ref_guard.outputs.ubuntu_2404 }}
     timeout-minutes: 120
@@ -436,6 +478,12 @@ jobs:
         # Binary preparation owns the versioned CLI build when payloads are requested.
         if: ${{ env.BUILD_INSTALLER_BINARIES != 'true' && env.BUILD_SMOKE_BINARIES != 'true' }}
         run: yarn workspace @happier-dev/cli build
+      - name: Download Windows service launcher
+        if: ${{ env.BUILD_INSTALLER_BINARIES == 'true' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-service-launcher-${{ inputs.checkout_sha != '' && inputs.checkout_sha || github.sha }}
+          path: packages/cli-common/native/windows/bin/windows-x64
       - name: Build requested binary payloads
         if: ${{ env.BUILD_INSTALLER_BINARIES == 'true' || env.BUILD_SMOKE_BINARIES == 'true' }}
         run: |
@@ -1472,7 +1520,7 @@ jobs:
             --release-channel "$env:INSTALLERS_RELEASE_CHANNEL"
 
   binary-smoke:
-    if: ${{ (inputs.select_jobs_explicitly && inputs.run_binary_smoke) || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_binary_smoke == 'true') }}
+    if: ${{ !cancelled() && needs.ci_plan.result == 'success' && needs.trusted_ref_guard.result == 'success' && needs.build-cli.result == 'success' && ((inputs.select_jobs_explicitly && inputs.run_binary_smoke) || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_binary_smoke == 'true')) }}
     needs: [ci_plan, trusted_ref_guard, build-cli]
     name: Binary Smoke (isolated cwd)
     runs-on: ${{ needs.trusted_ref_guard.outputs.ubuntu_2404 }}
@@ -2025,6 +2073,14 @@ jobs:
         with:
           args: --frozen-lockfile --ignore-engines
 
+      - name: Compile x64 GUI launcher with the installed MSVC toolchain
+        shell: cmd
+        run: call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 && node scripts\pipeline\release\build-windows-service-launcher.mjs
+
+      - name: Test launcher lifecycle in an isolated fixture
+        shell: pwsh
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File packages/cli-common/native/windows/service-launcher.test.ps1
+
       - name: Run real schtasks self-host E2E
         run: node --test apps/stack/scripts/self_host_schtasks.real.integration.test.mjs
 
@@ -2173,7 +2229,7 @@ jobs:
           fi
 
   cli-daemon-e2e:
-    if: ${{ (inputs.select_jobs_explicitly && inputs.run_cli_daemon_e2e) || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_cli_daemon_e2e == 'true') }}
+    if: ${{ !cancelled() && needs.ci_plan.result == 'success' && needs.build-cli.result == 'success' && ((inputs.select_jobs_explicitly && inputs.run_cli_daemon_e2e) || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_cli_daemon_e2e == 'true')) }}
     needs: [ci_plan, build-cli]
     name: CLI + Server (light/sqlite) E2E
     runs-on: ubuntu-latest
@@ -2366,7 +2422,7 @@ jobs:
           done
 
   e2e-core:
-    if: ${{ (inputs.select_jobs_explicitly && inputs.run_e2e_core) || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_e2e_core == 'true') }}
+    if: ${{ !cancelled() && needs.ci_plan.result == 'success' && needs.trusted_ref_guard.result == 'success' && needs.build-cli.result == 'success' && ((inputs.select_jobs_explicitly && inputs.run_e2e_core) || (!inputs.select_jobs_explicitly && needs.ci_plan.outputs.run_e2e_core == 'true')) }}
     needs: [ci_plan, trusted_ref_guard, build-cli]
     name: Core E2E (fast, packages/tests, server-light, sqlite)
     runs-on: ${{ needs.trusted_ref_guard.outputs.ubuntu_2204 }}
@@ -2432,7 +2488,7 @@ jobs:
           path: .project/logs/e2e
 
   e2e-core-slow:
-    if: ${{ inputs.select_jobs_explicitly && inputs.run_e2e_core_slow }}
+    if: ${{ !cancelled() && needs.trusted_ref_guard.result == 'success' && needs.build-cli.result == 'success' && inputs.select_jobs_explicitly && inputs.run_e2e_core_slow }}
     needs: [trusted_ref_guard, build-cli]
     name: Core E2E (slow, packages/tests, server-light, sqlite)
     runs-on: ${{ needs.trusted_ref_guard.outputs.ubuntu_2204 }}
@@ -2875,7 +2931,7 @@ jobs:
   ci_summary:
     name: CI result summary (all lanes)
     if: always()
-    needs: [ci_plan, ui-e2e, mobile-e2e-android, mobile-e2e-ios, ui-unit, ui-integration, ui, shared-packages-unit, server, server-db-contract, cli, stack, release-contracts, installers-smoke-linux, installers-smoke-macos, installers-smoke-windows, binary-smoke, build-smoke, cli-update-continuity, daemon-continuity, session-continuity, release-assets-docker, self-host-systemd-e2e, self-host-launchd-e2e, self-host-schtasks-e2e, self-host-daemon-e2e, typecheck, cli-daemon-e2e, e2e-core, e2e-core-slow, trusted_ref_guard, release_actor_guard, providers, stress, build-cli, unit-summary]
+    needs: [ci_plan, ui-e2e, mobile-e2e-android, mobile-e2e-ios, ui-unit, ui-integration, ui, shared-packages-unit, server, server-db-contract, cli, stack, release-contracts, installers-smoke-linux, installers-smoke-macos, installers-smoke-windows, binary-smoke, build-smoke, cli-update-continuity, daemon-continuity, session-continuity, release-assets-docker, self-host-systemd-e2e, self-host-launchd-e2e, self-host-schtasks-e2e, self-host-daemon-e2e, typecheck, cli-daemon-e2e, e2e-core, e2e-core-slow, trusted_ref_guard, release_actor_guard, providers, stress, build-windows-service-launcher, build-cli, unit-summary]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

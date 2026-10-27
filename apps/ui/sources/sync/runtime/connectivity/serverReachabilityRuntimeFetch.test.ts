@@ -15,6 +15,42 @@ afterEach(async () => {
 });
 
 describe('runtimeFetchWithServerReachability', () => {
+    it.each([403, 500, 503])('keeps HTTP %s local to the resource while unrelated operations remain admissible', async (status) => {
+        vi.doMock('@/utils/system/runtimeFetch', () => ({
+            runtimeFetch: async (input: RequestInfo | URL) => new Response('{}', {
+                status: new URL(String(input)).pathname === '/resource' ? status : 200,
+            }),
+        }));
+        const { runtimeFetchWithServerReachability } = await import('./serverReachabilityRuntimeFetch');
+        const { peekServerReachabilityState } = await import('./serverReachabilitySupervisorPool');
+        const target = { serverUrl: 'https://resource.example.test', token: 'accepted-token' };
+        expect((await runtimeFetchWithServerReachability({ ...target, url: `${target.serverUrl}/resource`, init: { method: 'GET' } })).status).toBe(status);
+        expect(peekServerReachabilityState(target.serverUrl)?.phase).toBe('online');
+        expect((await runtimeFetchWithServerReachability({ ...target, url: `${target.serverUrl}/unrelated`, init: { method: 'POST' } })).ok).toBe(true);
+    });
+
+    it.each([false, true])('reports maintenance only in the request scope captured before dispatch (stale=%s)', async (stale) => {
+        let respond!: (response: Response) => void;
+        let dispatched!: () => void;
+        const entered = new Promise<void>((resolve) => { dispatched = resolve; });
+        vi.doMock('@/utils/system/runtimeFetch', () => ({
+            runtimeFetch: async (input: RequestInfo | URL) => {
+                if (new URL(String(input)).pathname !== '/maintenance') return new Response('{}', { status: 200 });
+                dispatched();
+                return await new Promise<Response>((resolve) => { respond = resolve; });
+            },
+        }));
+        const { runtimeFetchWithServerReachability } = await import('./serverReachabilityRuntimeFetch');
+        const { invalidateServerReachabilitySupervisor, peekServerReachabilityState } = await import('./serverReachabilitySupervisorPool');
+        const target = { serverUrl: 'https://maintenance.example.test', token: 'accepted-token' };
+        const pending = runtimeFetchWithServerReachability({ ...target, url: `${target.serverUrl}/maintenance`, init: { method: 'GET' } });
+        await entered;
+        if (stale) await invalidateServerReachabilitySupervisor(target);
+        respond(new Response(null, { status: 503, headers: { 'Retry-After': '2', 'X-Happier-Retry-Reason': 'server_restarting' } }));
+        expect((await pending).status).toBe(503);
+        expect(peekServerReachabilityState(target.serverUrl)?.phase).toBe(stale ? 'online' : 'offline');
+    });
+
     it('reports an unreachable server as a known network error before issuing the request', async () => {
         vi.useFakeTimers();
         const runtimeFetchMock = vi.fn(async (_input: RequestInfo | URL) => {
@@ -295,7 +331,7 @@ describe('runtimeFetchWithServerReachability', () => {
                 networkMode,
                 signal: signalOwner === 'caller' ? controller.signal : undefined,
                 init: { method: 'GET', signal: signalOwner === 'request' ? controller.signal : undefined },
-            })).rejects.toBe(cancellation);
+            })).rejects.toMatchObject({ name: 'AbortError' });
             expect(latestPhase).toBe('online');
         } finally {
             unsubscribe();

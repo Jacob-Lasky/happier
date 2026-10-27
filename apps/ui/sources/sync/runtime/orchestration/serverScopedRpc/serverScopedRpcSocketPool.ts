@@ -5,7 +5,6 @@ import { canonicalizeServerUrl } from '@/sync/domains/server/url/serverUrlCanoni
 import { resolveSocketIoTransports } from '@/sync/runtime/socketIoTransports';
 import { applyUiClientUpgradeRequired } from '@/sync/runtime/clientCompatibility/uiClientUpgradeRequired';
 import {
-    reportServerUnreachable,
     startServerReachabilitySupervisor,
     subscribeServerReachabilityNetworkAllowed,
     waitForServerReachable,
@@ -28,7 +27,6 @@ type SocketLike = Readonly<{
 type ReachabilityDeps = Readonly<{
     startReachability: (params: Readonly<{ serverUrl: string; token: string }>) => Promise<void>;
     waitForReachable: (params: Readonly<{ serverUrl: string; token: string; timeoutMs: number }>) => Promise<void>;
-    reportUnreachable: (serverUrl: string, error: unknown) => void;
     subscribeNetworkAllowed: (listener: (allowed: boolean) => void) => () => void;
 }>;
 
@@ -45,11 +43,8 @@ type PoolEntry = {
     socket: SocketLike;
     inUseCount: number;
     connectInFlight: Promise<void> | null;
-    intentionalDisconnect: boolean;
     idleDisconnectTimer: ReturnType<typeof setTimeout> | null;
 };
-
-const INTENTIONAL_DISCONNECT_FLAG_RESET_MS = 1_000;
 
 const GLOBAL_TOKEN_CACHE_KEY_BY_TOKEN_KEY = '__HAPPIER_GLOBAL_SCOPED_RPC_TOKEN_CACHE_KEY_BY_TOKEN__';
 const GLOBAL_TOKEN_CACHE_KEY_MAX_ENTRIES = 512;
@@ -199,7 +194,6 @@ export function createServerScopedRpcSocketPool(overrides?: Partial<Deps>): Read
                     timeoutMs: params.timeoutMs,
                 });
             },
-            reportUnreachable: reportServerUnreachable,
             subscribeNetworkAllowed: subscribeServerReachabilityNetworkAllowed,
         },
         now: overrides?.now ?? (() => Date.now()),
@@ -216,18 +210,11 @@ export function createServerScopedRpcSocketPool(overrides?: Partial<Deps>): Read
             clearTimeout(entry.idleDisconnectTimer);
             entry.idleDisconnectTimer = null;
         }
-        entry.intentionalDisconnect = true;
         try {
             entry.socket.disconnect();
         } catch {
             // ignore
         }
-        // socket.io-client disconnect events are not guaranteed to be synchronous; keep the
-        // intentional disconnect flag set briefly so we don't report an expected disconnect
-        // as an unreachable server signal.
-        setTimeout(() => {
-            entry.intentionalDisconnect = false;
-        }, INTENTIONAL_DISCONNECT_FLAG_RESET_MS);
     };
 
     const scheduleIdleDisconnect = (entry: PoolEntry): void => {
@@ -260,23 +247,11 @@ export function createServerScopedRpcSocketPool(overrides?: Partial<Deps>): Read
             socket,
             inUseCount: 0,
             connectInFlight: null,
-            intentionalDisconnect: false,
             idleDisconnectTimer: null,
         };
 
-        socket.on('disconnect', (reason: unknown) => {
-            if (entry.intentionalDisconnect) {
-                entry.intentionalDisconnect = false;
-                return;
-            }
-            deps.reachability.reportUnreachable(serverUrl, new Error(typeof reason === 'string' ? reason : 'socket disconnect'));
-        });
         socket.on('connect_error', (error: unknown) => {
-            if (applyUiClientUpgradeRequired(error)) return;
-            deps.reachability.reportUnreachable(serverUrl, error);
-        });
-        socket.on('error', (error: unknown) => {
-            deps.reachability.reportUnreachable(serverUrl, error);
+            applyUiClientUpgradeRequired(error);
         });
 
         entriesByKey.set(key, entry);

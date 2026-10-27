@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { SelectableRow, type SelectableRowVariant } from '@/components/ui/lists/SelectableRow';
@@ -63,6 +63,11 @@ function startsFromInteractiveDescendant(event: WebMouseDownActivationEvent): bo
     return currentTarget.contains(interactiveAncestor);
 }
 
+const SWATCH_HIT_SIZE = 44;
+const SWATCH_HIGHLIGHT_SIZE = 34;
+const SWATCH_RING_SIZE = 26;
+const SWATCH_FILL_SIZE = 18;
+
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
         paddingVertical: 0,
@@ -93,7 +98,105 @@ const stylesheet = StyleSheet.create((theme) => ({
         bottom: 0,
         width: 4,
     },
+    // Targets abut (no gap) so 44pt hit areas never overlap; the visible geometry is concentric:
+    // highlight 34 → ring 26 (2px stroke, 2px gap) → fill 18.
+    swatchRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    swatchHit: {
+        width: SWATCH_HIT_SIZE,
+        height: SWATCH_HIT_SIZE,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    swatchHitPressed: {
+        opacity: 0.7,
+    },
+    swatchHighlight: {
+        width: SWATCH_HIGHLIGHT_SIZE,
+        height: SWATCH_HIGHLIGHT_SIZE,
+        borderRadius: SWATCH_HIGHLIGHT_SIZE / 2,
+        // Reserved so the highlight outline never shifts the swatch.
+        borderWidth: 1,
+        borderColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    // The menu row's selected treatment (SelectableRow rowSelected), sized to a swatch.
+    swatchHighlightActive: {
+        backgroundColor: theme.colors.surface.pressedOverlay,
+        borderColor: theme.colors.border.default,
+    },
+    swatchRing: {
+        width: SWATCH_RING_SIZE,
+        height: SWATCH_RING_SIZE,
+        borderRadius: SWATCH_RING_SIZE / 2,
+        borderWidth: 2,
+        borderColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    swatchRingChecked: {
+        borderColor: theme.colors.text.primary,
+    },
+    // "No colour": an unfilled ring, struck through on the diagonal.
+    swatchFillEmpty: {
+        borderWidth: 1.5,
+        borderColor: theme.colors.text.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    swatchStrike: {
+        width: SWATCH_FILL_SIZE * 1.2,
+        height: 1.5,
+        backgroundColor: theme.colors.text.secondary,
+        transform: [{ rotate: '-45deg' }],
+    },
+    swatchRingInherited: {
+        borderColor: theme.colors.text.secondary,
+        borderStyle: 'dashed',
+        borderWidth: 1.5,
+    },
+    swatchFill: {
+        width: SWATCH_FILL_SIZE,
+        height: SWATCH_FILL_SIZE,
+        borderRadius: SWATCH_FILL_SIZE / 2,
+        // Keeps pale colours (yellow on a light surface) from dissolving into the menu.
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.border.default,
+    },
 }));
+
+
+type RenderedMenuEntry = Readonly<{ swatchGroup: string | null; node: React.ReactElement }>;
+
+/** Consecutive swatches of one group wrap together in a single row; every other entry stays a row. */
+function groupSwatchRuns(entries: readonly RenderedMenuEntry[], rowStyle: object): React.ReactNode[] {
+    const output: React.ReactNode[] = [];
+    let run: React.ReactElement[] = [];
+    let runGroup: string | null = null;
+    const flush = () => {
+        if (run.length === 0) return;
+        output.push(
+            <View key={`swatch-row:${String(run[0]!.key)}`} style={rowStyle}>
+                {run}
+            </View>,
+        );
+        run = [];
+    };
+    for (const entry of entries) {
+        if (entry.swatchGroup === null || entry.swatchGroup !== runGroup) flush();
+        runGroup = entry.swatchGroup;
+        if (entry.swatchGroup === null) output.push(entry.node);
+        else run.push(entry.node);
+    }
+    flush();
+    return output;
+}
 
 export function SelectableMenuResults(props: {
     categories: ReadonlyArray<SelectableMenuCategory>;
@@ -109,6 +212,13 @@ export function SelectableMenuResults(props: {
         Omit<ItemProps, 'title' | 'subtitle' | 'icon' | 'rightElement' | 'selected' | 'disabled' | 'showChevron' | 'showDivider' | 'onPress'>
     >;
     registerItemLayout?: (key: string) => ScrollItemLayoutHandler;
+    /**
+     * Swatches draw the highlight only once the person hovers or uses the keyboard: on a pointer open
+     * the first swatch's highlight would read as a second selection beside the real ring.
+     */
+    swatchHighlightVisible?: boolean;
+    /** Owner-supplied map so the menu can open a submenu from the keyboard at the same anchor a pointer uses. */
+    submenuAnchorRegistry?: Map<string, React.RefObject<unknown>>;
 }) {
     const styles = stylesheet;
     const mouseDownActivatedItemIdRef = React.useRef<string | null>(null);
@@ -123,13 +233,15 @@ export function SelectableMenuResults(props: {
         rowAnchorRefs.current.set(itemId, created);
         return created;
     }, []);
+    const submenuAnchorRegistry = props.submenuAnchorRegistry;
     const getSubmenuAnchorRef = React.useCallback((itemId: string): React.RefObject<View | null> => {
         const existing = submenuAnchorRefs.current.get(itemId);
         if (existing) return existing;
         const created = React.createRef<View>();
         submenuAnchorRefs.current.set(itemId, created);
+        submenuAnchorRegistry?.set(itemId, created as React.RefObject<unknown>);
         return created;
-    }, []);
+    }, [submenuAnchorRegistry]);
     const handleOpenSubmenu = React.useCallback((item: SelectableMenuItem, anchorRef: React.RefObject<unknown>) => {
         if (!item.hasSubmenu || item.disabled) return false;
         props.onOpenSubmenu?.(item.id, anchorRef);
@@ -197,6 +309,61 @@ export function SelectableMenuResults(props: {
                     const handleOpenItemSubmenu = () => {
                         handleOpenSubmenu(item, submenuAnchorRef as React.RefObject<unknown>);
                     };
+                    if (item.swatch) {
+                        const swatchFrameLayout = props.registerItemLayout?.(String(itemIndex));
+                        return {
+                            swatchGroup: item.swatch.group ?? '',
+                            node: (
+                                <View
+                                    ref={rowAnchorRef}
+                                    key={item.id}
+                                    testID={`${optionTestID}:scroll-frame`}
+                                    {...(swatchFrameLayout ? { onLayout: swatchFrameLayout } : {})}
+                                >
+                                    <Pressable
+                                        testID={optionTestID}
+                                        accessibilityRole="radio"
+                                        accessibilityLabel={item.title}
+                                        accessibilityHint={item.subtitle}
+                                        accessibilityState={{ checked: item.swatch.checked === true, disabled: item.disabled === true }}
+                                        disabled={item.disabled}
+                                        onPress={() => {
+                                            if (item.disabled) return;
+                                            handlePressItem(item);
+                                        }}
+                                        onHoverIn={() => {
+                                            if (item.disabled) return;
+                                            props.onSelectionChange(itemIndex);
+                                        }}
+                                        style={({ pressed }) => [styles.swatchHit, pressed ? styles.swatchHitPressed : null]}
+                                        {...(Platform.OS === 'web' ? { onMouseDownCapture: handleOptionMouseDownCapture } : {})}
+                                    >
+                                        <View
+                                            testID={isSelected && props.swatchHighlightVisible ? `${optionTestID}:highlight` : undefined}
+                                            style={[styles.swatchHighlight, isSelected && props.swatchHighlightVisible ? styles.swatchHighlightActive : null]}
+                                        >
+                                                <View
+                                                    style={[
+                                                        styles.swatchRing,
+                                                        item.swatch?.checked
+                                                            ? styles.swatchRingChecked
+                                                            : item.swatch?.inherited ? styles.swatchRingInherited : null,
+                                                    ]}
+                                                >
+                                                    {item.swatch?.empty ? (
+                                                        <View style={[styles.swatchFill, styles.swatchFillEmpty]}>
+                                                            <View testID={`${optionTestID}:strike`} style={styles.swatchStrike} />
+                                                        </View>
+                                                    ) : (
+                                                        <View style={[styles.swatchFill, { backgroundColor: item.swatch?.color }]} />
+                                                    )}
+                                                </View>
+                                        </View>
+                                    </Pressable>
+                                </View>
+                            ),
+                        };
+                    }
                     const itemNode = rowKind === 'item' ? (
                         <Item
                             {...(props.itemProps ?? {})}
@@ -247,7 +414,7 @@ export function SelectableMenuResults(props: {
                     );
 
                     const scrollFrameLayout = props.registerItemLayout?.(String(itemIndex));
-                    return (
+                    return { swatchGroup: null, node: (
                         <View
                             ref={rowAnchorRef}
                             key={item.id}
@@ -270,7 +437,7 @@ export function SelectableMenuResults(props: {
                                 />
                             ) : null}
                         </View>
-                    );
+                    ) };
                 });
 
                 return (
@@ -280,7 +447,7 @@ export function SelectableMenuResults(props: {
                                 {category.title}
                             </Eyebrow>
                         ) : null}
-                        {categoryItems}
+                        {groupSwatchRuns(categoryItems, styles.swatchRow)}
                     </View>
                 );
             })}

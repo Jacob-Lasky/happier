@@ -14,6 +14,51 @@ vi.mock('@/sync/domains/state/storage', async () => {
 });
 
 describe('sessionMachineTarget', () => {
+    it('keeps a foreign Home display target separate from a colliding active Session and project', async () => {
+        const { resolveDisplayMachineTargetForSessionFromState } = await import('./sessionMachineTarget');
+        const state = {
+            sessions: { same: { active: false, metadata: { machineId: 'active-machine', path: '/active-session' } } },
+            machines: {},
+            getProjectForSession: () => ({ key: { machineId: 'active-machine', path: '/active-project' } }),
+        };
+        const input = { state, sessionId: 'same', serverId: 'foreign-home', activeServerId: 'active-home' };
+        expect(resolveDisplayMachineTargetForSessionFromState({ ...input,
+            metadata: { machineId: 'foreign-machine', path: '/foreign-session' },
+        })).toMatchObject({ machineId: 'foreign-machine', basePath: '/foreign-session' });
+        expect(resolveDisplayMachineTargetForSessionFromState(input)).toBeNull();
+    });
+
+    it('uses active Session and project overlays only for the matching Home or an unscoped caller', async () => {
+        const { resolveDisplayMachineTargetForSessionFromState } = await import('./sessionMachineTarget');
+        const state = {
+            sessions: { same: { active: false, metadata: { machineId: 'active-machine', path: '/active-session' } } },
+            machines: {},
+            getProjectForSession: () => ({ key: { machineId: 'active-machine', path: '/active-project' } }),
+        };
+        const input = { state, sessionId: 'same', metadata: { machineId: 'row-machine', path: '/row-session' } };
+        for (const scope of [{}, { serverId: 'active-home', activeServerId: 'active-home' }]) {
+            expect(resolveDisplayMachineTargetForSessionFromState({ ...input, ...scope }))
+                .toMatchObject({ machineId: 'active-machine', basePath: '/active-project' });
+        }
+        expect(resolveDisplayMachineTargetForSessionFromState({ ...input, serverId: 'foreign-home' }))
+            .toMatchObject({ machineId: 'row-machine', basePath: '/row-session' });
+    });
+
+    it('captures the current Home for an explicitly scoped display-target read', async () => {
+        const { readDisplayMachineTargetForSession } = await import('./sessionMachineTarget');
+        const { getActiveServerSnapshot } = await import('@/sync/domains/server/serverRuntime');
+        const activeServerId = getActiveServerSnapshot().serverId;
+        getStateSpy.mockReturnValue({
+            sessions: { same: { metadata: { machineId: 'active-machine', path: '/active-session' } } },
+            machines: {},
+        });
+        const input = { sessionId: 'same', metadata: { machineId: 'row-machine', path: '/row-session' } };
+        expect(readDisplayMachineTargetForSession({ ...input, serverId: `foreign-${activeServerId}` }))
+            .toMatchObject({ machineId: 'row-machine', basePath: '/row-session' });
+        expect(readDisplayMachineTargetForSession({ ...input, serverId: activeServerId }))
+            .toMatchObject({ machineId: 'active-machine', basePath: '/active-session' });
+    });
+
     it('reads machine target from session metadata when available', async () => {
         const { readMachineTargetForSession } = await import('./sessionMachineTarget');
         getStateSpy.mockReturnValue({

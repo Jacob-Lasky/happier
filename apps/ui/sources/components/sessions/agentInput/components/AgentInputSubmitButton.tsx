@@ -137,6 +137,7 @@ export const AgentInputSubmitButton = React.memo(function AgentInputSubmitButton
     const sendMenuAnchorRef = React.useRef<View>(null);
     const [sendMenuOpen, setSendMenuOpen] = React.useState(false);
     const [sendTooltipOpen, setSendTooltipOpen] = React.useState(false);
+    const hasSendIntent = props.hasSendableContent || props.armedContinuationTarget != null;
     const sendMenuEnabled = props.hasSendableContent && !props.disabled && !props.isSending
         && !props.armedContinuationTarget && Boolean(props.sendMenuModes?.length);
     const getSendModeTitle = (mode: MessageSendMode) => mode === 'agent_queue'
@@ -149,20 +150,20 @@ export const AgentInputSubmitButton = React.memo(function AgentInputSubmitButton
     };
 
     React.useEffect(() => { setSendMenuOpen(false); }, [props.sessionId, sendMenuEnabled]);
-    const showStopWhenEmpty = !props.hasSendableContent && !props.micPressHandler && props.canStop === true;
+    const showStopWhenEmpty = !hasSendIntent && !props.micPressHandler && props.canStop === true;
     /*
      * With nothing to send, a composer that has Voice hands this button to the
      * microphone — `submitPress` routes there before it ever reaches Stop, whether
      * or not the mic is already listening. Text takes the button back.
      */
-    const micHoldsSubmit = Boolean(props.micPressHandler) && !props.hasSendableContent;
+    const micHoldsSubmit = Boolean(props.micPressHandler) && !hasSendIntent;
+    const disabled = props.disabled || (!hasSendIntent && !micHoldsSubmit && !showStopWhenEmpty);
 
     // The armed switch only reaches the button while the button is actually a
     // send. The mic and Stop are other actions, and labelling either
     // "Continue with {Agent}" would promise something that press does not do.
-    // An empty composer is NOT one of those: with no mic and no running turn the
-    // control is still the send, just an inert one, so it keeps naming the switch
-    // it would take.
+    // An armed continuation is sendable even without text, and takes precedence
+    // over the empty composer's microphone and Stop actions.
     // The composer's engine chip reads the SAME armed target and only skips this
     // narrowing, so the two cannot name different Agents.
     const armedTarget = resolveArmedSubmitContinuation({
@@ -178,14 +179,14 @@ export const AgentInputSubmitButton = React.memo(function AgentInputSubmitButton
 
     const submitPress = React.useCallback(() => {
         hapticsLight();
-        if (props.hasSendableContent) {
+        if (hasSendIntent) {
             props.onSend();
         } else if (props.micPressHandler) {
             props.micPressHandler();
         } else if (showStopWhenEmpty) {
             props.onStop?.();
         }
-    }, [props.hasSendableContent, props.micPressHandler, props.onSend, props.onStop, showStopWhenEmpty]);
+    }, [hasSendIntent, props.micPressHandler, props.onSend, props.onStop, showStopWhenEmpty]);
 
     if (armedContinuation) {
         const mark = armedContinuation.markAgentId ? (
@@ -213,15 +214,10 @@ export const AgentInputSubmitButton = React.memo(function AgentInputSubmitButton
                     // The full sentence, always in words: this press commits an Agent
                     // switch, and a glyph reads as nothing to a screen reader.
                     accessibilityLabel={armedContinuation.accessibilityLabel}
-                    // Named but not yet pressable. The circular send explains that
-                    // same state with this exact hint, and the armed shape is the
-                    // same control, so it says the same thing rather than leaving a
-                    // screen reader with a disabled button and no reason.
-                    accessibilityHint={props.hasSendableContent ? undefined : t('session.inputPlaceholder')}
                     leading={armedContinuation.markPlacement === 'leading' ? mark : undefined}
                     trailing={armedContinuation.markPlacement === 'trailing' ? mark : undefined}
                     loading={props.isSending}
-                    disabled={props.disabled}
+                    disabled={disabled}
                     onPress={submitPress}
                 />
             </AgentInputSubmitShape>
@@ -250,7 +246,7 @@ export const AgentInputSubmitButton = React.memo(function AgentInputSubmitButton
                 testID={props.testID}
                 active={props.hasSendableContent || props.isSending || Boolean(props.micPressHandler) || showStopWhenEmpty}
                 loading={props.isSending || (showStopWhenEmpty && props.isStopping)}
-                disabled={props.disabled}
+                disabled={disabled}
                 accessibilityLabel={
                     props.hasSendableContent
                         ? (props.submitAccessibilityLabel ?? (props.sessionId ? t('common.send') : t('newSession.title')))
@@ -268,7 +264,7 @@ export const AgentInputSubmitButton = React.memo(function AgentInputSubmitButton
                         : sendMenuEnabled ? t('agentInput.sendOptions.hint') : undefined
                 }
                 accessibilityState={{
-                    disabled: Boolean(props.disabled),
+                    disabled,
                     ...(sendMenuEnabled ? { expanded: sendMenuOpen } : {}),
                 }}
                 hitSlop={SUBMIT_HIT_SLOP}

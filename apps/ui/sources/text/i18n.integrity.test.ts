@@ -787,7 +787,8 @@ const UNTRANSLATED_PREFIX_BASELINE_COUNTS: Record<string, Record<string, number>
         'settingsSession.promptPersonalization.': 0,
         'commandPalette.commands.': 3,
         'releaseNotes.onboardingShowcase.': 0,
-        'sessionsList.': 6,
+        // +2: "Orange" and "Indigo" are the French colour names (sessionsList.appearance.colors).
+        'sessionsList.': 8,
     },
     ru: {
         'settingsAppearance.themeProfiles.': 106,
@@ -877,7 +878,8 @@ const UNTRANSLATED_PREFIX_BASELINE_COUNTS: Record<string, Record<string, number>
         'settingsSession.promptPersonalization.': 0,
         'commandPalette.commands.': 6,
         'releaseNotes.onboardingShowcase.': 0,
-        'sessionsList.': 1,
+        // +2: "Orange" and "Indigo" are the German colour names (sessionsList.appearance.colors).
+        'sessionsList.': 3,
     },
 };
 

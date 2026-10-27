@@ -67,6 +67,22 @@ boundary. The primary-session classifier preserves it as `dependency_failure` wi
 `provider_cli_not_found` and the canonical remediation, without exposing raw paths or
 mistaking runner turn allocation for provider prompt acceptance.
 
+In current development source (not yet released), Windows x64 CLI and hstack payloads carry
+`happier-service-launcher.exe`, the native task launcher described in
+[CLI architecture](cli-architecture.md), beside their executable; the npm CLI and stack packages
+carry it under the bundled cli-common package at `native/windows/bin/windows-x64/`. It is a
+release-time artifact built from `packages/cli-common/native/windows/service-launcher.cpp` by
+`scripts/pipeline/release/build-windows-service-launcher.mjs` in the Windows release job, and the
+existing Ubuntu jobs consume that exact build. Installed hosts never compile it, and source
+checkouts must run the build script before installing a Windows service. A self-contained binary
+resolves the launcher from its runtime root
+(`packages/cli-common/src/firstPartyRuntime/resolveSelfContainedCliRuntimeRoot.ts`, the same root
+the CLI's `resolveCliRuntimeAssetPath` uses): a `~/.happier/bin/happier|hprev|hdev` shortcut is a
+hardlink or copy, so it maps to `~/.happier/<cli root>/current`; any other self-contained binary
+uses its own directory. Node and Bun processes use the package asset. Windows hstack has no
+supported shortcut installer today, so a binary hstack resolves the launcher beside itself; a
+future Windows hstack shortcut must be added to that runtime-root mapping.
+
 ## Installer GitHub authentication
 
 In current development source, the standalone Bash and PowerShell installers prefer

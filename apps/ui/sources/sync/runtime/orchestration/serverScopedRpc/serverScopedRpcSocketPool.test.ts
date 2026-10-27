@@ -6,7 +6,7 @@ import { createServerScopedRpcSocketPool } from './serverScopedRpcSocketPool';
 
 type Listener = (...args: any[]) => void;
 
-function createFakeSocket(options: Readonly<{ disconnectEventDelayMs?: number }> = {}): Readonly<{
+function createFakeSocket(): Readonly<{
     socket: any;
     connectSpy: ReturnType<typeof vi.fn>;
     disconnectSpy: ReturnType<typeof vi.fn>;
@@ -41,10 +41,6 @@ function createFakeSocket(options: Readonly<{ disconnectEventDelayMs?: number }>
 
     const disconnectSpy = vi.fn(() => {
         socket.connected = false;
-        if (typeof options.disconnectEventDelayMs === 'number') {
-            setTimeout(() => emit('disconnect', 'io client disconnect'), Math.max(0, options.disconnectEventDelayMs));
-            return;
-        }
         emit('disconnect', 'io client disconnect');
     });
 
@@ -66,6 +62,33 @@ function createFakeSocket(options: Readonly<{ disconnectEventDelayMs?: number }>
 }
 
 describe('serverScopedRpcSocketPool', () => {
+    it.each(['connect_error', 'error', 'disconnect'])('keeps healthy HTTP admissible after scoped socket %s', async (event) => {
+        const { setRuntimeFetch, resetRuntimeFetch } = await import('@/utils/system/runtimeFetch');
+        const { peekServerReachabilityState, resetServerReachabilitySupervisors } = await import('@/sync/runtime/connectivity/serverReachabilitySupervisorPool');
+        const { runtimeFetchWithServerReachability } = await import('@/sync/runtime/connectivity/serverReachabilityRuntimeFetch');
+        const { socket, connectSpy, emitEvent } = createFakeSocket();
+        const target = { serverUrl: `https://scoped-${event}.example.test`, token: 'accepted-token' };
+        const failure = new Error('Scoped socket refused');
+        if (event === 'connect_error') connectSpy.mockImplementation(() => emitEvent(event, failure));
+        setRuntimeFetch(async () => new Response('{}', { status: 200 }));
+        const pool = createServerScopedRpcSocketPool({ createSocket: () => socket, readIdleDisconnectMs: () => 0 });
+        let client: ScopedSocketClient | undefined;
+        try {
+            if (event === 'connect_error') await expect(pool.acquire({ ...target, timeoutMs: 1000 })).rejects.toBe(failure);
+            else {
+                client = await pool.acquire({ ...target, timeoutMs: 1000 });
+                emitEvent(event, event === 'disconnect' ? 'transport close' : failure);
+            }
+            // Let asynchronous failure reporting settle before observing the real HTTP owner.
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            expect(peekServerReachabilityState(target.serverUrl)?.phase).toBe('online');
+            expect((await runtimeFetchWithServerReachability({ ...target, url: `${target.serverUrl}/ordinary`, init: { method: 'POST' } })).status).toBe(200);
+        } finally {
+            client?.disconnect(); await pool.stopAll(); pool.resetForTests();
+            await resetServerReachabilitySupervisors(); resetRuntimeFetch();
+        }
+    });
+
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -77,7 +100,6 @@ describe('serverScopedRpcSocketPool', () => {
             reachability: {
                 waitForReachable: async () => {},
                 startReachability: async () => {},
-                reportUnreachable: () => {},
                 subscribeNetworkAllowed: () => () => {},
             },
             readIdleDisconnectMs: () => 0,
@@ -109,7 +131,6 @@ describe('serverScopedRpcSocketPool', () => {
             reachability: {
                 waitForReachable: async () => {},
                 startReachability: async () => {},
-                reportUnreachable: () => {},
                 subscribeNetworkAllowed: () => () => {},
             },
             readIdleDisconnectMs: () => 0,
@@ -147,7 +168,6 @@ describe('serverScopedRpcSocketPool', () => {
             reachability: {
                 waitForReachable,
                 startReachability,
-                reportUnreachable: () => {},
                 subscribeNetworkAllowed: () => () => {},
             },
             readIdleDisconnectMs: () => 5000,
@@ -174,7 +194,6 @@ describe('serverScopedRpcSocketPool', () => {
             reachability: {
                 waitForReachable: async () => {},
                 startReachability: async () => {},
-                reportUnreachable: () => {},
                 subscribeNetworkAllowed: () => () => {},
             },
         });
@@ -198,7 +217,6 @@ describe('serverScopedRpcSocketPool', () => {
 	            reachability: {
 	                waitForReachable: async () => {},
 	                startReachability: async () => {},
-	                reportUnreachable: () => {},
 	                subscribeNetworkAllowed: () => () => {},
 	            },
 	            readIdleDisconnectMs: () => 5_000,
@@ -235,7 +253,6 @@ describe('serverScopedRpcSocketPool', () => {
 	            reachability: {
 	                waitForReachable: async () => {},
 	                startReachability: async () => {},
-	                reportUnreachable: () => {},
 	                subscribeNetworkAllowed: (listener: (allowed: boolean) => void) => {
 	                    capturedListener = listener;
 	                    return () => {
@@ -265,69 +282,4 @@ describe('serverScopedRpcSocketPool', () => {
 	        pool.resetForTests();
 	    });
 
-    it('does not report unreachable when an intentional disconnect emits asynchronously', async () => {
-        vi.useFakeTimers();
-        const ioSpy = vi.fn();
-        const { socket } = createFakeSocket({ disconnectEventDelayMs: 0 });
-        ioSpy.mockReturnValue(socket);
-        const reportUnreachableSpy = vi.fn();
-
-        const pool = createServerScopedRpcSocketPool({
-            createSocket: () => ioSpy(),
-            reachability: {
-                waitForReachable: async () => {},
-                startReachability: async () => {},
-                reportUnreachable: reportUnreachableSpy,
-                subscribeNetworkAllowed: () => () => {},
-            },
-            readIdleDisconnectMs: () => 5_000,
-        });
-
-        const c1: ScopedSocketClient = await pool.acquire({ serverUrl: 'https://server.example.test', token: 't', timeoutMs: 1000 });
-        c1.disconnect();
-
-        await pool.stopAll();
-        await vi.runAllTimersAsync();
-        expect(reportUnreachableSpy).not.toHaveBeenCalled();
-
-        pool.resetForTests();
-    });
-
-    it('does not report upgrade-required connect errors as server reachability failures', async () => {
-        const { socket, emitEvent } = createFakeSocket();
-        const reportUnreachableSpy = vi.fn();
-        const pool = createServerScopedRpcSocketPool({
-            createSocket: () => socket,
-            reachability: {
-                waitForReachable: async () => {},
-                startReachability: async () => {},
-                reportUnreachable: reportUnreachableSpy,
-                subscribeNetworkAllowed: () => () => {},
-            },
-            readIdleDisconnectMs: () => 5_000,
-        });
-
-        const client = await pool.acquire({
-            serverUrl: 'https://server.example.test',
-            token: 't',
-            timeoutMs: 1_000,
-        });
-        emitEvent('connect_error', {
-            data: {
-                error: 'client-upgrade-required',
-                requirement: {
-                    v: 1,
-                    clientKind: 'ui-web',
-                    minimumAppVersion: '0.3.0',
-                    updateUrl: null,
-                },
-            },
-        });
-
-        expect(reportUnreachableSpy).not.toHaveBeenCalled();
-
-        client.disconnect();
-        await pool.stopAll();
-        pool.resetForTests();
-    });
 });

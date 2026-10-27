@@ -23,6 +23,18 @@ const EMPTY_ROW_STATE: SessionListRowStateSnapshot = {
 };
 
 describe('resolveSessionListRowModelAdjacency', () => {
+    it('updates the appearance of one row and retains its model for equivalent colour snapshots', () => {
+        const item = createSessionItem(createRenderable('coloured'));
+        const cache = createSessionListRowModelsCache();
+        const settings = createSettings();
+        const adjacency = resolveSessionListRowModelAdjacency([item], 0);
+        const first = buildCachedSessionListRowModel({ item, cache, settings, adjacency, snapshot: EMPTY_ROW_STATE });
+        const snapshot = { ...EMPTY_ROW_STATE, appearanceColor: { kind: 'accent', key: 'blue' } as const };
+        const coloured = buildCachedSessionListRowModel({ item, cache, settings, adjacency, snapshot });
+        expect(coloured).toMatchObject({ appearanceColor: { kind: 'accent', key: 'blue' } });
+        expect(coloured).not.toBe(first);
+        expect(buildCachedSessionListRowModel({ item, cache, settings, adjacency, snapshot: { ...snapshot, appearanceColor: { ...snapshot.appearanceColor } } })).toBe(coloured);
+    });
     it('reuses the canonical adjacency value when list identity changes without changing neighbors', () => {
         const session = createSessionItem(createRenderable('stable-adjacency'));
         const first = resolveSessionListRowModelAdjacency([session], 0);

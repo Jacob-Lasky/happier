@@ -15,6 +15,7 @@ import {
     SESSION_ACTION_MOVE_TO_FOLDER_ID,
     SESSION_ACTION_PIN_ID,
     SESSION_ACTION_RENAME_ID,
+    SESSION_ACTION_SET_APPEARANCE_COLOR_ID,
     SESSION_ACTION_SET_ATTENTION_STANDING_ID,
     SESSION_ACTION_STOP_ID,
     resolveAttentionStandingFromSessionActionId,
@@ -44,6 +45,20 @@ import {
     type SessionReminderPresetV1,
 } from '@/sync/domains/session/organization/sessionReminderPreset';
 import { showSessionReminderDateTimeModal, showSessionReminderPresetManagerModal } from './sessionReminderModals';
+import {
+    resolveSessionAppearanceColorMenuChoice,
+    type SessionAppearanceColorMenuInput,
+} from '@/components/sessions/shell/appearance/sessionAppearanceColorMenu';
+import type { SessionAppearanceColor } from '@/sync/domains/session/organization/appearanceColor';
+
+function findMenuItem(items: readonly DropdownMenuItem[], itemId: string): DropdownMenuItem | null {
+    for (const item of items) {
+        if (item.id === itemId) return item;
+        const nested = item.submenu ? findMenuItem(item.submenu.items, itemId) : null;
+        if (nested) return nested;
+    }
+    return null;
+}
 
 function showActionError(error: unknown) {
     if (error instanceof HappyError) {
@@ -107,8 +122,19 @@ export function useSessionRowActionMenu(params: Readonly<{
     reminder?: SessionReminderPresentation | null;
     /** The canonical archive flow already has this session's archive in flight. */
     archiving?: boolean;
+    /** The session's own colour menu; null hides it (server without session appearances). */
+    appearance?: (SessionAppearanceColorMenuInput & Readonly<{
+        onChange: (color: SessionAppearanceColor | null) => void;
+    }>) | null;
+    /** Closes this row's open menus (an item that kept them open while it loaded is ready). */
+    closeMenus?: () => void;
 }>): SessionRowActionMenuState {
     const target = params.target;
+    const [customColorPickerLoading, setCustomColorPickerLoading] = React.useState(false);
+    const appearanceMenu = React.useMemo(
+        () => (params.appearance ? { ...params.appearance, customPickerLoading: customColorPickerLoading } : null),
+        [customColorPickerLoading, params.appearance],
+    );
     const [reminderPresets, setReminderPresets] = useSettingMutable('sessionReminderPresetsV1');
     const tagMenuItems = React.useMemo((): DropdownMenuItem[] => {
         return params.knownTags.map((tag) => ({
@@ -230,6 +256,7 @@ export function useSessionRowActionMenu(params: Readonly<{
             reminderPresets,
             reminder: params.reminder,
             reminderNowMs: Date.now(),
+            appearance: appearanceMenu,
         });
         if (
             !params.isNativeMobile
@@ -248,6 +275,7 @@ export function useSessionRowActionMenu(params: Readonly<{
         }
         return items;
     }, [
+        appearanceMenu,
         params.iconColor,
         params.isNativeMobile,
         params.leadingMenuItems,
@@ -271,6 +299,24 @@ export function useSessionRowActionMenu(params: Readonly<{
         }
         if (leadingMenuItemIds.has(itemId)) {
             await params.onSelectLeadingMenuItem?.(itemId);
+            return;
+        }
+        if (params.appearance && itemId.startsWith(`${SESSION_ACTION_SET_APPEARANCE_COLOR_ID}:`)) {
+            const appearance = params.appearance;
+            try {
+                const color = await resolveSessionAppearanceColorMenuChoice({
+                    menuId: SESSION_ACTION_SET_APPEARANCE_COLOR_ID,
+                    itemId,
+                    current: appearance.current,
+                    inherited: appearance.inherited,
+                    serverId: target.serverId,
+                    onPickerLoading: setCustomColorPickerLoading,
+                    closeMenus: params.closeMenus,
+                });
+                if (color !== undefined) appearance.onChange(color);
+            } catch (error) {
+                showActionError(error);
+            }
             return;
         }
         if (itemId.startsWith(`${SESSION_ATTENTION_REMINDER_MENU_ID}:`)) {
@@ -341,6 +387,7 @@ export function useSessionRowActionMenu(params: Readonly<{
         handleRenameSession,
         leadingMenuItemIds,
         target,
+        params.appearance,
         params.onEnterSelectionMode,
         params.onMoveToFolder,
         params.onSelectLeadingMenuItem,
@@ -408,9 +455,14 @@ export function useSessionRowActionMenu(params: Readonly<{
             }).catch(showActionError);
             return;
         }
+        // An item that loads first keeps the menu open; its owner closes it when ready.
+        if (findMenuItem(contextMenuItems, itemId)?.keepMenuOpen) {
+            void handleMoreMenuSelect(itemId);
+            return;
+        }
         params.setContextMenuOpen(false);
         void handleMoreMenuSelect(itemId);
-    }, [handleMoreMenuSelect, params, target]);
+    }, [contextMenuItems, handleMoreMenuSelect, params, target]);
 
     return {
         tagMenuItems,

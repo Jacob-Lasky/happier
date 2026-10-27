@@ -76,7 +76,13 @@ export function captureSessionTurnBaseline(sessionId: string): SessionTurnBaseli
   };
 }
 
-/** Assistant reply texts after the baseline; thinking output is stored as agent-text but is never a reply. */
+function readAssistantReplyText(message: Message | undefined): string | null {
+  if (message?.kind !== 'agent-text' || message.peer || message.isThinking === true
+    || typeof message.text !== 'string') return null;
+  return message.text.trim() || null;
+}
+
+/** Assistant reply texts after the baseline, excluding thinking and peer input. */
 export function collectAssistantTextMessagesSinceBaseline(
   sessionId: string,
   baselineIds: Set<string>,
@@ -87,13 +93,9 @@ export function collectAssistantTextMessagesSinceBaseline(
   const out: string[] = [];
   for (let idx = startIndex; idx < messages.length; idx += 1) {
     const message = messages[idx];
-    if (message?.kind !== 'agent-text') continue;
-    if (message?.isThinking === true) continue;
-    if (typeof message?.text !== 'string') continue;
     if (typeof message?.id === 'string' && baselineIds.has(message.id)) continue;
-    const text = message.text.trim();
-    if (!text) continue;
-    out.push(text);
+    const text = readAssistantReplyText(message);
+    if (text) out.push(text);
   }
   return out;
 }
@@ -189,6 +191,7 @@ export function collectFinalAssistantReplySinceBaseline(
     : messages.length >= baseline.baselineCount ? baseline.baselineCount : 0;
   const submittedSeq = submittedIndex >= 0 ? messages[submittedIndex]?.seq : undefined;
   let trailing: string[] = [];
+  let beforePeer: string[] = [];
   for (let idx = startIndex; idx < messages.length; idx += 1) {
     const message = messages[idx];
     if (typeof submitted?.endSeqInclusive === 'number' && (
@@ -199,13 +202,20 @@ export function collectFinalAssistantReplySinceBaseline(
     if (typeof message?.id === 'string' && baseline.baselineIds.has(message.id)) continue;
     if (message?.kind === 'tool-call' || message?.kind === 'user-text') {
       trailing = [];
+      beforePeer = [];
       continue;
     }
-    if (message?.kind !== 'agent-text' || message?.isThinking === true || typeof message?.text !== 'string') continue;
-    const text = message.text.trim();
+    // Peer input is never spoken. Keep the prior answer if no later reply replaces it.
+    if (message?.kind === 'agent-text' && message.peer) {
+      if (trailing.length > 0) beforePeer = trailing;
+      trailing = [];
+      continue;
+    }
+    const text = readAssistantReplyText(message);
     if (text) trailing.push(text);
   }
-  return trailing.length > 0 ? trailing.join('\n\n') : null;
+  const reply = trailing.length > 0 ? trailing : beforePeer;
+  return reply.length > 0 ? reply.join('\n\n') : null;
 }
 
 function hasTurnProjection(marker: SessionTurnMarker | null): boolean {

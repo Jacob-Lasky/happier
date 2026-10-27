@@ -6142,6 +6142,9 @@ function SessionViewLoaded({
         const promptInvocationsV1 = storage.getState().settings.promptInvocationsV1;
         const resolved = resolveSessionComposerSend({
             input: composerMessage,
+            emptyInputFallback: inSessionAgentPicker.armedContinuation !== null
+                && attachmentDrafts.length === 0 && !hasIncludedReviewCommentDrafts
+                ? t('common.continue') : undefined,
             executionRunsEnabled,
             goalControlsAvailable: providerSupportsEditableSessionGoals,
             promptInvocationsV1,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as fs from 'node:fs';
 
 import { MessageQueue2 } from '@/agent/runtime/modeMessageQueue';
 import type { SessionClientPort } from '@/api/session/sessionClientPort';
@@ -26,6 +27,12 @@ const mockClaudeRemote = vi.hoisted(() => vi.fn());
 const mockClaudeRemoteAgentSdk = vi.hoisted(() => vi.fn());
 const mockRunClaudeUnifiedTerminalSession = vi.hoisted(() => vi.fn());
 const notifyDaemonSessionStarted = vi.hoisted(() => vi.fn(async () => ({})));
+
+// Replace only the OS filesystem operation; keep Session identity and launcher recovery real.
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, statSync: vi.fn(actual.statSync) };
+});
 
 // Daemon HTTP boundary; keep capability reporting and launcher selection real.
 vi.mock('@/daemon/controlClient', async (importOriginal) => ({
@@ -219,6 +226,77 @@ describe.sequential('claudeRemoteLauncher legacy Runtime Activity subscriber', (
     }
   });
 
+  it.each(['before launch', 'during launch'] as const)('exits once without consuming input when transcript inspection is denied for an identity observed %s', async observation => {
+    const { session } = createHarness(undefined, { providerSessionId: null });
+    const transcriptDir = await mkdtemp(join(tmpdir(), 'claude-denied-resume-'));
+    const transcriptPath = join(transcriptDir, 'claude-observed.jsonl');
+    const observeIdentity = async () => {
+      session.onSessionFound('claude-observed', { transcript_path: transcriptPath });
+      await session.drainCriticalMetadataWrites({ timeoutMs: 500 });
+    };
+    const echoSeedStarted = createDeferred<void>();
+    const finishEchoSeed = createDeferred<void>();
+    if (observation === 'before launch') {
+      await observeIdentity();
+    } else {
+      Object.assign(session.client, {
+        fetchRecentTranscriptTextItemsForAcpImport: vi.fn(async () => {
+          // This transport read runs after launch-start identity capture, before the resume decision.
+          echoSeedStarted.resolve(undefined);
+          await finishEchoSeed.promise;
+          return [];
+        }),
+      });
+    }
+    const denied = Object.assign(new Error('Transcript access denied'), { code: 'EACCES' });
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    const stat = vi.mocked(fs.statSync).mockImplementation((...args) => {
+      if (args[0] === transcriptPath) throw denied;
+      return Reflect.apply(actualFs.statSync, actualFs, args);
+    });
+    const termination = new AbortController();
+    let launchErrors = 0;
+    const originalInfoFile = logger.infoFile.bind(logger);
+    const infoFile = vi.spyOn(logger, 'infoFile').mockImplementation((...args) => {
+      originalInfoFile(...args);
+      if (args[0] === '[remote]: launch error' && ++launchErrors > 1) {
+        // Bound a regressed busy loop without replacing its recovery decision or adding a timer.
+        termination.abort('repeated-transcript-inspection-failure');
+      }
+    });
+    session.queue.push('continue the observed conversation', {
+      permissionMode: 'default', claudeRemoteAgentSdkEnabled: true, claudeUnifiedTerminalEnabled: false,
+    }, { userMessageLocalId: 'denied-resume-input' });
+
+    try {
+      const launcher = claudeRemoteLauncher(session, { signal: termination.signal });
+      if (observation === 'during launch') {
+        await echoSeedStarted.promise;
+        await observeIdentity();
+        finishEchoSeed.resolve(undefined);
+      }
+      await expect(launcher).resolves.toBe('exit');
+      expect(launchErrors).toBe(1);
+      expect(termination.signal.aborted).toBe(false);
+      expect(session.sessionId).toBe('claude-observed');
+      expect(session.transcriptPath).toBe(transcriptPath);
+      expect(session.queue.size()).toBe(1);
+      expect(mockClaudeRemoteAgentSdk).not.toHaveBeenCalled();
+      expect(infoFile).toHaveBeenCalledWith('[remote]: launch error', expect.objectContaining({
+        error: expect.stringContaining('ClaudeResumeSessionUnavailableError'),
+        disposition: 'preserve-resume-and-exit',
+      }));
+      expect(session.client.sendSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'message', message: expect.stringContaining('transcript is unavailable'),
+      }));
+    } finally {
+      finishEchoSeed.resolve(undefined);
+      stat.mockImplementation(actualFs.statSync);
+      infoFile.mockRestore();
+      await rm(transcriptDir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps SDK presentation-only model annotations out of Running metadata', async () => {
     const { session, switchHandlerReady } = createHarness(undefined, { providerSessionId: null });
     Object.assign(session.client, {
@@ -255,6 +333,75 @@ describe.sequential('claudeRemoteLauncher legacy Runtime Activity subscriber', (
     } finally {
       finishQuery.resolve(undefined);
       await Promise.all([Promise.resolve(switchHandler({ to: 'local' })), session.cleanup(), launcher]);
+    }
+  });
+
+  it('starts a fresh Claude session for the first remote message when the observed terminal id never materialized', async () => {
+    const { session, switchHandlerReady } = createHarness(undefined, { providerSessionId: null });
+    Object.assign(session.client, {
+      getStoredContentEncryptionContext: () => ({ mode: 'plain' }),
+      upsertSessionSystemRecord: async () => {},
+    });
+    const finishQuery = createDeferred<void>();
+    let queryIdle = false;
+    let receivedPrompt: unknown;
+    const createQuery: NonNullable<Parameters<typeof actualClaudeRemoteAgentSdk.claudeRemoteAgentSdk>[0]['createQuery']> = ({ prompt, options }) => ({
+      // Only the external SDK query is replaced. The launcher, start-plan resolution and
+      // Session identity owner run for real, so a ghost resume id would fail before this
+      // query ever starts.
+      async *[Symbol.asyncIterator]() {
+        expect(options?.resume).toBeUndefined();
+        if (typeof prompt === 'string') {
+          receivedPrompt = prompt;
+        } else {
+          const first = await prompt[Symbol.asyncIterator]().next();
+          if (first.done) throw new Error('Expected the first queued remote prompt');
+          receivedPrompt = first.value.message.content;
+        }
+        yield { type: 'system', subtype: 'init', model: 'claude-requested', session_id: 'claude-fresh-start' };
+        yield { type: 'result', subtype: 'success', is_error: false, result: 'First remote message handled' };
+        queryIdle = true;
+        await finishQuery.promise;
+      },
+      close: () => finishQuery.resolve(undefined),
+      setPermissionMode: async () => {}, setModel: async () => {}, setMaxThinkingTokens: async () => {},
+      supportedCommands: async () => [], supportedModels: async () => [],
+    } as unknown as Query);
+    mockClaudeRemoteAgentSdk.mockImplementation((opts: Parameters<typeof actualClaudeRemoteAgentSdk.claudeRemoteAgentSdk>[0]) => (
+      actualClaudeRemoteAgentSdk.claudeRemoteAgentSdk({ ...opts, claudeExecutablePath: '/tmp/claude', createQuery })
+    ));
+    const transcriptDir = await mkdtemp(join(tmpdir(), 'claude-zero-turn-takeover-'));
+    const infoFile = vi.spyOn(logger, 'infoFile');
+    try {
+      // Zero-turn terminal birth: the SessionStart hook observed an id whose transcript
+      // never materialized (no turn ran locally before the App took over).
+      session.onSessionFound('claude-ghost', {
+        transcript_path: join(transcriptDir, 'claude-ghost.jsonl'),
+      } as SessionHookData);
+      await session.drainCriticalMetadataWrites({ timeoutMs: 500 });
+      session.queue.push('first message from the app', {
+        permissionMode: 'default',
+        claudeRemoteAgentSdkEnabled: true, claudeUnifiedTerminalEnabled: false,
+      }, { userMessageLocalId: 'zero-turn-input' });
+      const launcher = claudeRemoteLauncher(session);
+      const switchHandler = await switchHandlerReady;
+      try {
+        await vi.waitFor(() => expect(queryIdle).toBe(true));
+        expect(JSON.stringify(receivedPrompt)).toContain('first message from the app');
+        expect(infoFile).not.toHaveBeenCalledWith('[remote]: launch error', expect.objectContaining({
+          error: expect.stringContaining('ClaudeResumeSessionUnavailableError'),
+        }));
+        expect(session.client.sendSessionEvent).not.toHaveBeenCalledWith(expect.objectContaining({
+          type: 'message',
+          message: expect.stringContaining('transcript is unavailable'),
+        }));
+      } finally {
+        finishQuery.resolve(undefined);
+        await Promise.all([Promise.resolve(switchHandler({ to: 'local' })), session.cleanup(), launcher]);
+      }
+    } finally {
+      infoFile.mockRestore();
+      await rm(transcriptDir, { recursive: true, force: true });
     }
   });
 

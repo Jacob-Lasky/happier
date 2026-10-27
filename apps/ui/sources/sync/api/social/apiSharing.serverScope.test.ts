@@ -27,7 +27,8 @@ vi.mock('react-native-mmkv', () => {
     return { MMKV };
 });
 
-vi.mock('@/sync/http/client', () => ({
+vi.mock('@/sync/http/client', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/sync/http/client')>()),
     serverFetch: serverFetchMock,
 }));
 

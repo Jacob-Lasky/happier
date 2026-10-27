@@ -98,6 +98,7 @@ export function createSessionItemTestRowModel(
     const subtitle = input.subtitleOverride ?? '';
 
     const model: SessionListRowModel = {
+        appearanceColor: null,
         rowKey: `${serverId ?? 'local'}:${sessionId}`,
         sessionId,
         serverId,

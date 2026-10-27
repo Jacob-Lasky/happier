@@ -4,7 +4,7 @@ import { Encryption } from '@/sync/encryption/encryption';
 import { observeServerTimestamp } from '@/sync/runtime/time';
 import { createRpcCallError } from '@/sync/runtime/rpcErrors';
 import { SOCKET_RPC_EVENTS } from '@happier-dev/protocol/socketRpc';
-import { serverFetch, StaleServerGenerationError } from '@/sync/http/client';
+import { serverFetch, StaleServerGenerationError, type ServerReadRequestInit } from '@/sync/http/client';
 import { getActiveServerSnapshot } from '@/sync/domains/server/serverRuntime';
 import { resolveSocketIoTransports } from '@/sync/runtime/socketIoTransports';
 import { syncPerformanceTelemetry } from '@/sync/runtime/syncPerformanceTelemetry';
@@ -12,13 +12,13 @@ import { storage } from '@/sync/domains/state/storage';
 import { canonicalizeServerUrl, createServerUrlComparableKey } from '@/sync/domains/server/url/serverUrlCanonical';
 import {
     type ManagedConnectionState,
+    type ManagedConnectionSupervisor,
     type ManagedConnectionTransport,
     type TransportDisconnectEvent,
 } from '@happier-dev/connection-supervisor';
 import { createSyncSocketTransport } from '@/sync/api/session/connection/createSyncSocketTransport';
+import { createSocketConnectionSupervisor } from '@/sync/runtime/connectivity/createSocketConnectionSupervisor';
 import {
-    reportServerUnreachable,
-    invalidateServerReachabilitySupervisor,
     reportServerRestarting,
     startServerReachabilitySupervisor,
     stopServerReachabilitySupervisor,
@@ -211,6 +211,7 @@ class ApiSocket {
     private reachabilityUnsubscribe: (() => void) | null = null;
     private reachabilityServerUrl: string | null = null;
     private socketTransport: ManagedConnectionTransport | null = null;
+    private socketSupervisor: ManagedConnectionSupervisor | null = null;
     private detachSocketTransportListeners: Array<() => void> = [];
 
     //
@@ -236,6 +237,7 @@ class ApiSocket {
         const serverUrl = canonicalizeServerUrl(endpoint) || endpoint;
 
         if (this.reachabilityUnsubscribe && this.reachabilityServerUrl && this.reachabilityServerUrl !== serverUrl) {
+            this.stopSocketSupervisor();
             const previousServerUrl = this.reachabilityServerUrl;
             this.reachabilityUnsubscribe();
             this.reachabilityUnsubscribe = null;
@@ -259,6 +261,7 @@ class ApiSocket {
         this.reachabilityUnsubscribe?.();
         this.reachabilityUnsubscribe = null;
         this.reachabilityServerUrl = null;
+        this.stopSocketSupervisor();
         if (previousServerUrl) {
             void stopServerReachabilitySupervisor(previousServerUrl);
         }
@@ -476,10 +479,10 @@ class ApiSocket {
     // HTTP Requests
     //
 
-    request(path: string, options?: RequestInit): Promise<Response>;
+    request(path: string, options?: ServerReadRequestInit): Promise<Response>;
     /** Consume the response body while HTTP cancellation and the initiating Home scope remain enforced. */
-    request<T>(path: string, options: RequestInit | undefined, consumeResponse: (response: Response) => Promise<T>): Promise<T>;
-    async request<T>(path: string, options?: RequestInit, consumeResponse?: (response: Response) => Promise<T>): Promise<Response | T> {
+    request<T>(path: string, options: ServerReadRequestInit | undefined, consumeResponse: (response: Response) => Promise<T>): Promise<T>;
+    async request<T>(path: string, options?: ServerReadRequestInit, consumeResponse?: (response: Response) => Promise<T>): Promise<Response | T> {
         if (!this.config) {
             throw new Error('SyncSocket not initialized');
         }
@@ -543,7 +546,7 @@ class ApiSocket {
         const requestKey = canDedupe
             // Intentionally exclude `snapshot.generation` from the de-dupe key so concurrent callers still share
             // a single in-flight fetch even if the active server generation changes while bootstrapping.
-            ? `${snapshot.serverId ?? ''}:${method}:${url}:tk:${getOrCreateTokenCacheKey(credentials.token)}`
+            ? `${snapshot.serverId ?? ''}:${method}:${url}:bounded:${options?.responseSizeBounded === true}:tk:${getOrCreateTokenCacheKey(credentials.token)}`
             : null;
 
         let response: Response;
@@ -623,41 +626,48 @@ class ApiSocket {
             if (this.hasConnectedOnce) {
                 this.pendingReconnectNotification = true;
             }
-            void this.socketTransport?.disconnect({ intentional: true });
+            this.stopSocketSupervisor();
             return;
         }
 
-        try {
-            this.ensureSocketTransport();
-        } catch (error) {
-            this.setError(error instanceof Error ? error : new Error(String(error)));
-            this.updateStatus('error');
-            return;
+        if (!this.socketSupervisor) {
+            const supervisor = createSocketConnectionSupervisor({
+                createTransport: () => {
+                    this.ensureSocketTransport(true);
+                    return this.socketTransport!;
+                },
+                onStateChange: (next) => {
+                    if (this.socketSupervisor === supervisor) this.applySocketConnectionState(next);
+                },
+            });
+            this.socketSupervisor = supervisor;
         }
 
-        if (!this.socketTransport || this.socketTransport.isConnected()) {
-            return;
-        }
-
-        this.updateStatus('connecting');
-        void this.socketTransport.connect().catch((error) => {
+        const supervisor = this.socketSupervisor;
+        void supervisor.start().catch((error) => {
+            if (this.socketSupervisor !== supervisor) return;
             this.setError(error instanceof Error ? error : new Error(String(error)));
             this.updateStatus('error');
         });
+        this.applySocketConnectionState(supervisor.getState());
     }
 
-    private invalidateReachabilityAfterSocketTransportFailure(error: unknown): void {
-        const config = this.config;
-        if (!config) return;
-        void invalidateServerReachabilitySupervisor({ serverUrl: config.endpoint, token: config.token }).catch(() => {
-            reportServerUnreachable(config.endpoint, error);
-        });
+    private applySocketConnectionState(state: ManagedConnectionState): void {
+        if (state.phase === 'online') this.updateStatus('connected');
+        else if (state.phase === 'connecting') this.updateStatus('connecting');
+        else this.updateStatus(state.phase === 'auth_failed' ? 'error' : 'disconnected');
     }
 
-    private ensureSocketTransport(): void {
+    private stopSocketSupervisor(): void {
+        const supervisor = this.socketSupervisor;
+        this.socketSupervisor = null;
+        void supervisor?.stop();
+    }
+
+    private ensureSocketTransport(forceNew = false): void {
         if (!this.config) return;
         const key = `${this.config.endpoint}|${this.config.token}`;
-        if (this.socketTransport && this.socketTransportKey === key && this.socket) {
+        if (!forceNew && this.socketTransport && this.socketTransportKey === key && this.socket) {
             return;
         }
 
@@ -695,11 +705,10 @@ class ApiSocket {
                     return;
                 }
                 this.pendingReconnectNotification = true;
-                this.invalidateReachabilityAfterSocketTransportFailure(event.error ?? new Error(event.reason ?? 'socket disconnect'));
             }),
             transport.onError((error: unknown) => {
                 this.setError(error instanceof Error ? error : new Error(String(error)));
-                this.invalidateReachabilityAfterSocketTransportFailure(error);
+                this.updateStatus('error');
             }),
         ];
     }
@@ -739,8 +748,6 @@ class ApiSocket {
             case 'online':
                 if (this.socketTransport?.isConnected() === true) {
                     this.updateStatus('connected');
-                } else if (this.currentStatus === 'disconnected') {
-                    this.updateStatus('connecting');
                 }
                 return;
             case 'offline':

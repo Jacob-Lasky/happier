@@ -35,6 +35,7 @@ import {
   buildServiceDefinition,
   buildWindowsScheduledTaskPowerShellAction,
   planServiceAction,
+  preflightServiceInstallAssets,
   renderSystemdServiceUnit,
   renderWindowsScheduledTaskWrapperPs1,
   resolveServiceBackend,
@@ -1141,7 +1142,7 @@ async function uninstallAutoUpdateJob({ config }) {
 }
 
 async function restartAndCheckHealth({ config, serviceSpec, port }) {
-  await restartManagedService({ platform: config.platform, mode: config.mode, spec: serviceSpec }).catch(() => {});
+  await restartManagedService({ platform: config.platform, mode: config.mode, homeDir: homedir(), spec: serviceSpec }).catch(() => {});
   const timeoutMs = resolveSelfHostHealthTimeoutMs();
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -1759,6 +1760,8 @@ export async function runSelfHostRuntimeMutationWithServiceRecovery({
   const previousDefinitionContents = existsSync(previousDefinition.path)
     ? await readFile(previousDefinition.path, 'utf-8').catch(() => previousDefinition.contents)
     : previousDefinition.contents;
+  // Install and recovery both need these assets; reject before stopping the current service.
+  await preflightServiceInstallAssets({ backend });
 
   try {
     return await mutateRuntime({

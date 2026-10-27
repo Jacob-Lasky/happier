@@ -17,6 +17,7 @@ import {
   SESSION_ACTION_PIN_ID,
   SESSION_ACTION_RENAME_ID,
   SESSION_ACTION_RESUME_ID,
+  SESSION_ACTION_SET_APPEARANCE_COLOR_ID,
   SESSION_ACTION_SET_ATTENTION_STANDING_ID,
   SESSION_ACTION_STOP_ID,
   SESSION_ACTION_UNARCHIVE_ID,
@@ -99,14 +100,21 @@ const completeSessionForkNavigationMock = vi.hoisted(() =>
 );
 const modalAlertMock = vi.hoisted(() => vi.fn());
 const pinRequestMock = vi.hoisted(() => vi.fn());
+const appearanceRequestMock = vi.hoisted(() => vi.fn(async () => ({ appearance: null })));
 const clipboardMock = vi.hoisted(() => vi.fn(async () => true));
 
 // Network and platform clipboard boundaries; pin orchestration and formatting stay real.
 vi.mock('@/sync/api/session/sessionOrganizationApi', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/sync/api/session/sessionOrganizationApi')>(),
   setSessionPin: pinRequestMock,
+  setSessionAppearance: appearanceRequestMock,
 }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: clipboardMock }));
+// The account encryption-mode HTTP adapter is a network boundary; a plain account writes plain display envelopes.
+vi.mock('@/sync/api/account/apiAccountEncryptionMode', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/sync/api/account/apiAccountEncryptionMode')>(),
+  fetchAccountEncryptionMode: async () => ({ mode: 'plain' }),
+}));
 const modalConfirmMock = vi.hoisted(() => vi.fn(async () => true));
 const modalPromptMock = vi.hoisted(() => vi.fn(async () => 'Renamed from header'));
 const dropdownRenderCount = vi.hoisted(() => ({
@@ -548,6 +556,45 @@ describe('SessionHeaderActionMenu handoff', () => {
       }));
       expect(realStorage.getState().sessionOrganizationPinsBySessionKey[`${profile.id}:${session.id}`])
         .toEqual(pinned ? undefined : pin);
+    } finally {
+      credentialsSpy.mockRestore();
+    }
+  });
+
+  it('offers Set color only where the server stores session colours, and writes the chosen colour for this session', async () => {
+    const profile = upsertServerProfile({ serverUrl: 'https://header-colours.example', name: 'Header colour test' });
+    resolveServerIdForSessionIdFromLocalCacheMock.mockReturnValue(profile.id);
+    resolvePreferredServerIdForSessionIdMock.mockReturnValue(profile.id);
+    usePreferredServerIdForSessionMock.mockReturnValue(profile.id);
+    const session = createSessionFixture({ id: 'header-colour', active: false });
+    const credentialsSpy = vi.spyOn(TokenStorage, 'getCredentialsForServerUrl')
+      .mockResolvedValue({ token: 'header-token', secret: 'header-secret' });
+    const openMenu = async (screen: Awaited<ReturnType<typeof renderScreen>>) => {
+      await act(async () => {
+        screen.findByType('DropdownMenu' as React.ElementType).props.onOpenChange(true);
+      });
+      return screen.findByType('DropdownMenu' as React.ElementType);
+    };
+    try {
+      const unsupported = await renderScreen(<SessionHeaderActionMenu sessionId={session.id} session={session} />);
+      expect(((await openMenu(unsupported)).props.items as Array<{ id: string }>).map((item) => item.id))
+        .not.toContain(SESSION_ACTION_SET_APPEARANCE_COLOR_ID);
+      await unsupported.unmount();
+
+      realStorage.setState({ sessionOrganizationSessionAppearancesSupportedByServerId: { [profile.id]: true } } as any);
+      const screen = await renderScreen(<SessionHeaderActionMenu sessionId={session.id} session={session} />);
+      const dropdown = await openMenu(screen);
+      const colorItem = (dropdown.props.items as any[]).find((item) => item.id === SESSION_ACTION_SET_APPEARANCE_COLOR_ID);
+      expect(colorItem?.submenu?.items.some((item: { swatch?: unknown }) => item.swatch)).toBe(true);
+      const green = (colorItem.submenu.items as Array<{ id: string }>).find((item) => item.id.endsWith(':accent:green'))!;
+      await act(async () => {
+        dropdown.props.onSelect(green.id);
+        await findFireAndForgetByTag('SessionHeaderActionMenu.execute.sessionAppearance');
+      });
+      expect(appearanceRequestMock).toHaveBeenCalledWith(expect.objectContaining({
+        serverUrl: profile.serverUrl,
+        sessionId: session.id,
+      }));
     } finally {
       credentialsSpy.mockRestore();
     }

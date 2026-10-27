@@ -223,7 +223,7 @@ function expectApiSocketMessageRequest(params: {
     throw new Error(`Expected apiSocket request for ${requestPath}`);
   }
   const [path, init] = call;
-  expect(init).toEqual({ method: 'GET' });
+  expect(init).toMatchObject({ method: 'GET' });
 
   const [, query = ''] = String(path).split('?');
   const searchParams = new URLSearchParams(query);
@@ -246,7 +246,7 @@ function expectApiSocketInitialMessageRequest(params: {
     throw new Error(`Expected apiSocket request for ${requestPath}`);
   }
   const [path, init] = call;
-  expect(init).toEqual({ method: 'GET' });
+  expect(init).toMatchObject({ method: 'GET' });
 
   const [, query = ''] = String(path).split('?');
   const searchParams = new URLSearchParams(query);

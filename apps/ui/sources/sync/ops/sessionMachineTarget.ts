@@ -13,6 +13,7 @@ import type { MachineDisplayRenderable } from '@/sync/domains/machines/machineDi
 import { resolveSessionMachineId } from '@/sync/domains/session/directSessions/resolveSessionMachineId';
 import { normalizeKnownProjectMachineId } from '@/sync/runtime/orchestration/projectKeyIdentity';
 import { resolvePathRelativeToRoot } from '@/utils/path/resolvePathRelativeToRoot';
+import { getActiveServerSnapshot } from '@/sync/domains/server/serverRuntime';
 
 type SessionTargetMetadataLike = Readonly<{
   machineId?: string | null;
@@ -311,9 +312,13 @@ export function resolveDisplayMachineTargetForSessionFromState(input: Readonly<{
   state: SessionMachineTargetState;
   sessionId?: string | null;
   metadata?: SessionTargetMetadataLike;
+  serverId?: string | null;
+  activeServerId?: string | null;
 }>): { machineId: string; basePath: string } | null {
   const sessionId = normalizeNonEmptyString(input.sessionId);
-  if (sessionId) {
+  const requestedServerId = normalizeNonEmptyString(input.serverId);
+  const useActiveSession = !requestedServerId || requestedServerId === normalizeNonEmptyString(input.activeServerId);
+  if (sessionId && useActiveSession) {
     const session = input.state.sessions?.[sessionId];
     const metadata = session?.metadata ?? input.metadata ?? null;
     const project = typeof input.state.getProjectForSession === 'function'
@@ -346,11 +351,14 @@ export function resolveDisplayMachineTargetForSessionFromState(input: Readonly<{
 export function readDisplayMachineTargetForSession(input: Readonly<{
   sessionId?: string | null;
   metadata?: SessionTargetMetadataLike;
+  serverId?: string | null;
 }>): { machineId: string; basePath: string } | null {
   return resolveDisplayMachineTargetForSessionFromState({
     state: storage.getState() as SessionMachineTargetState,
     sessionId: input.sessionId,
     metadata: input.metadata,
+    serverId: input.serverId,
+    activeServerId: normalizeNonEmptyString(input.serverId) ? getActiveServerSnapshot().serverId : undefined,
   });
 }
 

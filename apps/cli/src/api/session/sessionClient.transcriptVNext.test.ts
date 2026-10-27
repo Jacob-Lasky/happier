@@ -206,6 +206,41 @@ describe('ApiSessionClient transcript vNext transport', () => {
     );
   });
 
+  it('sends Claude peer messages as agent output that keeps their sender provenance', async () => {
+    vi.resetModules();
+    sessionSocketStub = createApiSessionSocketStub({ connected: true, emitWithAckResult: { ok: true, id: 'm1', seq: 1, localId: 'l1', didWrite: true } });
+    userSocketStub = createApiSessionSocketStub({ connected: true, emitWithAckResult: { ok: true } });
+
+    const { ApiSessionClient } = await import('./sessionClient');
+
+    const client = new ApiSessionClient('tok', createPlainSessionFixture({ id: 's1' }));
+    client.sendClaudeSessionMessage({
+      type: 'user',
+      uuid: 'peer-1',
+      origin: { kind: 'peer', from: 'a1', name: 'general-purpose', handback: true },
+      message: { role: 'user', content: 'From general-purpose:\n\nReport' },
+    } as RawJSONLines);
+
+    await flushQueuedCommits(client as unknown as ClientWithQueuedCommits);
+
+    expect(sessionSocketStub.emitWithAck).toHaveBeenCalledWith(
+      'message',
+      expect.objectContaining({
+        messageRole: 'agent',
+        message: expect.objectContaining({
+          t: 'plain',
+          v: expect.objectContaining({
+            role: 'agent',
+            content: expect.objectContaining({
+              type: 'output',
+              data: expect.objectContaining({ origin: expect.objectContaining({ kind: 'peer', name: 'general-purpose' }) }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('stamps Claude assistant prose as agent', async () => {
     vi.resetModules();
     sessionSocketStub = createApiSessionSocketStub({ connected: true, emitWithAckResult: { ok: true, id: 'm1', seq: 1, localId: 'l1', didWrite: true } });

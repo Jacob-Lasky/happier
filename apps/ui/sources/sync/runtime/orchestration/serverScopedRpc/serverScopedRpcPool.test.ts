@@ -152,16 +152,12 @@ describe('resolveScopedMachineEncryptionContext', () => {
     it('passes an abort signal to fetch for timeout enforcement', async () => {
         const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
             if (String(_url).endsWith('/health') || String(_url).endsWith('/v1/auth/ping')) {
-                return { ok: true, status: 200, json: async () => ({}) };
+                return new Response('{}', { status: 200 });
             }
             if (String(_url).includes('/v1/machines')) {
                 expect(init && 'signal' in init).toBe(true);
             }
-            return {
-                ok: false,
-                status: 503,
-                json: async () => [],
-            };
+            return new Response('[]', { status: 503 });
         });
         vi.stubGlobal('fetch', fetchSpy);
 

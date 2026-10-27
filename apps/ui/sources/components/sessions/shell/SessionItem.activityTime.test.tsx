@@ -227,6 +227,7 @@ function createSessionRowModel(overrides: Partial<SessionListRowModel> = {}): Se
     const sessionId = String(session.id);
     const serverId = overrides.serverId === undefined ? 'server_a' : overrides.serverId;
     const model: SessionListRowModel = {
+        appearanceColor: null,
         rowKey: `${serverId ?? 'local'}:${sessionId}`,
         sessionId,
         serverId,

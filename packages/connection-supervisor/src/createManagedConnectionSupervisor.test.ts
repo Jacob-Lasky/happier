@@ -80,6 +80,39 @@ async function flushAsyncCleanup(): Promise<void> {
 }
 
 describe('createManagedConnectionSupervisor', () => {
+  it('resets escalation only on explicit transport success and preserves a pending offline retry', async () => {
+    vi.useFakeTimers();
+    const harness = createTransportHarness();
+    const supervisor = createManagedConnectionSupervisor({
+      ...DEFAULT_MANAGED_CONNECTION_POLICY,
+      createTransport: () => harness.transport,
+      probeReadiness: async () => ({ status: 'ready' }),
+      jitterRatio: 0,
+    });
+    try {
+      await supervisor.start();
+      harness.emitDisconnect();
+      await flushAsyncCleanup();
+      await vi.advanceTimersByTimeAsync(250);
+      harness.emitDisconnect();
+      await flushAsyncCleanup();
+      const retry = supervisor.getState();
+      expect(retry).toMatchObject({ phase: 'offline', attempt: 2 });
+      expect(retry.nextRetryAt! - Date.now()).toBe(2_000);
+      supervisor.resetRetryBackoff!();
+      expect(supervisor.getState()).toBe(retry);
+      await vi.advanceTimersByTimeAsync(2_000);
+      supervisor.resetRetryBackoff!();
+      expect(supervisor.getState()).toMatchObject({ phase: 'online', attempt: 0 });
+      harness.emitDisconnect();
+      await flushAsyncCleanup();
+      expect(supervisor.getState().nextRetryAt! - Date.now()).toBe(250);
+    } finally {
+      await supervisor.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('dedupes concurrent start() calls while the initial readiness probe is in flight', async () => {
     const harness = createTransportHarness();
     const probeDeferred = createDeferred<ReadinessProbeResult>();

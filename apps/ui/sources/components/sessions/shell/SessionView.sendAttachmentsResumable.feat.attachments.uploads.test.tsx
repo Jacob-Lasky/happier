@@ -1,6 +1,8 @@
 import * as React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionAgentTransitionResultV1 } from '@happier-dev/protocol';
+import type { SessionComposerSendResolution } from '@/sync/domains/input/slashCommands/resolveSessionComposerSend';
 import { findTestInstanceByTypeWithProps, invokeTestInstanceHandler, renderScreen } from '@/dev/testkit';
 import { installSessionShellCommonModuleMocks } from './sessionShellTestHelpers';
 import { clearSessionAttachmentDrafts } from '@/components/sessions/attachments/sessionAttachmentDraftStore';
@@ -57,7 +59,7 @@ const clearArmedContinuationSubmissionSpy = vi.hoisted(() => vi.fn(() => true));
 const recordArmedContinuationSubmissionSpy = vi.hoisted(() => vi.fn());
 const useFeatureEnabledSpy = vi.hoisted(() => vi.fn());
 const useFeatureDecisionSpy = vi.hoisted(() => vi.fn());
-const runSessionAgentTransitionSpy = vi.hoisted(() => vi.fn(async (..._args: any[]) => ({
+const runSessionAgentTransitionSpy = vi.hoisted(() => vi.fn(async (..._args: any[]): Promise<SessionAgentTransitionResultV1> => ({
     type: 'accepted' as const,
     localId: 'agent-transition:armed-local-id',
 })));
@@ -93,7 +95,7 @@ function readLatestChatListPropsWithPendingEdit() {
 
 const pendingFireAndForget: Promise<unknown>[] = [];
 
-const resolveSessionComposerSendMock = vi.fn((..._args: any[]) => ({ kind: 'send', text: 'hello' }));
+const resolveSessionComposerSendMock = vi.fn((..._args: any[]): SessionComposerSendResolution => ({ kind: 'send', text: 'hello' }));
 
 vi.mock('react-native-reanimated', async () => {
     const { createReanimatedModuleMock } = await import('@/dev/testkit/mocks/reanimated');
@@ -2107,6 +2109,40 @@ describe('SessionView (attachments.uploads resumable send)', () => {
             armedContinuationState.submission = null;
             armedContinuationState.submissionIntent = null;
         };
+
+        it.each(['', ' \n\t '])('continues with a default prompt while retaining the real blank draft snapshot (%j)', async (text) => {
+            armSecondAgent();
+            sendMessageSpy.mockClear();
+            featureEnabledState.reviewComments = false;
+            reviewCommentDraftsState.current = [];
+            const realResolver = (await vi.importActual<typeof import('@/sync/domains/input/slashCommands/resolveSessionComposerSend')>(
+                '@/sync/domains/input/slashCommands/resolveSessionComposerSend',
+            )).resolveSessionComposerSend;
+            resolveSessionComposerSendMock.mockImplementationOnce(realResolver);
+            runSessionAgentTransitionSpy.mockResolvedValueOnce({ type: 'outcome_unknown', localId: 'armed-local-id' });
+            const { t } = await import('@/text');
+            const screen = await renderScreen(<AppPaneProvider><SessionView id="s1" /></AppPaneProvider>);
+            try {
+                pendingFireAndForget.length = 0;
+                const agentInput = screen.tree && findTestInstanceByTypeWithProps(screen.tree, 'AgentInput', {});
+                if (!agentInput) throw new Error('AgentInput not mounted');
+                await act(async () => { invokeTestInstanceHandler(agentInput, 'onChangeText', text, 'AgentInput'); });
+                await act(async () => { invokeTestInstanceHandler(agentInput, 'onSend', undefined, 'AgentInput'); });
+                for (const pending of [...pendingFireAndForget]) await pending;
+                expect(runSessionAgentTransitionSpy).toHaveBeenCalledWith(expect.objectContaining({
+                    request: expect.objectContaining({ input: expect.objectContaining({ text: t('common.continue') }) }),
+                }));
+                expect(armedContinuationState.submission).toMatchObject({
+                    input: { text: t('common.continue'), localId: 'armed-local-id' },
+                    currentness: { text },
+                });
+                expect(draftHookState.valuesBySessionId.get('s1') ?? '').toBe(text);
+                expect(sendMessageSpy).not.toHaveBeenCalled();
+            } finally {
+                await screen.unmount();
+                pendingFireAndForget.length = 0;
+            }
+        });
 
         async function sendOneAttachment(tree: renderer.ReactTestRenderer, structuredInputMetaOverrides?: Record<string, unknown>) {
             const agentInput = findTestInstanceByTypeWithProps(tree, 'AgentInput' as any, {}) as any;

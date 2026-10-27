@@ -222,6 +222,65 @@ from this current-work projection.
 ## HTTP endpoints by area
 See `api.md` for the full HTTP endpoint catalog and auth flows.
 
+### Session organization (development)
+
+`GET /v2/session-organization` returns the account-scoped organization snapshot.
+Pins, folders, tags, ordering and workspace/group labels retain their existing
+collections. Per-session appearance uses a separate `sessionAppearances`
+collection; it does not extend the strictly parsed label-kind enum.
+
+Clients request `includeSessionAppearances=true` to receive
+`sessionAppearances: [{ sessionId, display, updatedAt }]`. The server omits the
+field otherwise, preserving older strict snapshot readers. A client receiving
+no field after requesting it treats session appearance as unsupported by that
+server. The snapshot collection is bounded at 1,000 rows per account because
+snapshots are list first-paint payloads. Only visible, unarchived sessions count
+toward the write quota; retained appearances for archived or inaccessible sessions
+do not consume it. Reads include only visible, unarchived sessions.
+
+`PUT /v2/session-organization/appearances/:sessionId` accepts `{ display }` and
+returns `{ appearance: { sessionId, display, updatedAt } }`. The display is the
+existing opaque `{ t: 'encrypted', c }` or `{ t: 'plain', v }` organization
+envelope; plain envelopes require a plain account. The server validates the
+envelope but does not interpret colour or other display contents. `{ display:
+null }` deletes the override idempotently and returns `{ appearance: null }`;
+clearing an archived session remains allowed through the existing session-access
+rule. Malformed request bodies follow the existing Fastify validation path and
+return 400 `invalid-params`; handler-level validation failures return 400
+`invalid-session-appearance`. Inaccessible sessions return 404 `Session not found`, and creating beyond the bound returns
+409 `session-appearance-limit-exceeded`. Updating an existing row or clearing
+one remains allowed at the bound.
+
+The existing organization mutation owner commits the row, increments the account
+organization checkpoint, and publishes a change hint with
+`scope: 'sessionAppearances'` and the affected `sessionIds`. Account and session
+deletion cascade to their appearance rows in PostgreSQL, SQLite and MySQL.
+Project colours remain client-owned display content inside workspace labels.
+These additions describe development source, not released availability.
+
+The UI colour model and inheritance rule live in
+`apps/ui/sources/sync/domains/session/organization/appearanceColor.ts`.
+Display content uses `{ color: { kind: 'accent', key } }` or
+`{ color: { kind: 'custom', hex: '#RRGGBB' } }`; custom hex values normalize to
+opaque uppercase six-digit hex. Session overrides take precedence over workspace
+colours. Workspace display content can carry both `label` and `color`.
+`setWorkspaceDisplay` merges field intents through the existing label operation
+and envelope owner, and removes a workspace label row only when both are empty.
+Legacy import preserves existing server label rows, including colour-only rows.
+
+For UI consumers, `useSessionListViewState` exposes
+`setWorkspaceColor(workspaceKey, colorOrNull, { serverId }?)`,
+`setSessionAppearance(sessionId, colorOrNull, { serverId }?)`,
+`workspaceColorsV1`, and `sessionAppearancesSupported`. Handlers use the existing
+organization mutation error path; session ids are unprefixed. Multi-server rows
+pass their own server id. Project header items and session row models expose
+`appearanceColor`. `hooks/session/useSessionAppearance.ts` provides
+`useSessionAppearancesSupported(serverId)` for server-local action availability
+and `useCustomSessionAppearanceColors(serverId?)` for distinct custom hex colours
+currently in use. Mount the latter inside the open picker; its values are not
+historical recency. Resolve theme accents with `resolveSessionAppearanceColor`.
+Workspace colour actions remain available when per-session support is absent.
+
 ## Sequencing and concurrency
 - `UpdatePayload.seq` is the per-user update sequence (monotonic) used for sync ordering.
 - Sessions, machines, and artifacts have their own `seq` fields used by clients for ordering.
@@ -232,6 +291,10 @@ See `api.md` for the full HTTP endpoint catalog and auth flows.
 The following describes the current development implementation, not a new server protocol or a released client guarantee.
 
 Account-change cursors, session sequence hints, and transcript paging cursors serve different purposes. A session hint announces newer durable content; it does not prove that this device has loaded the intervening rows. Likewise, acknowledging an account change need not download the entire transcript: the UI can retain the outstanding forward load in its existing deferred-transcript state. Failed shell loads, message loads, and revision repairs still block the affected checkpoint.
+
+Development UI HTTP reads retain cancellation through response-body completion. Web reads use an inactivity window derived from the server heartbeat contract (15 seconds between pings plus a 45-second timeout); each received body chunk renews it. `EXPO_PUBLIC_HAPPIER_SERVER_READ_INACTIVITY_TIMEOUT_MS` overrides that window. Native fetch exposes no progress before completing a response, so only explicitly server-bounded reads (transcript pages and changes/cursor) use that pre-resolution deadline. Unpaged session metadata, organization snapshots, pending queues and draft hydration remain manually cancellable without a native total deadline. POST-based reads opt in explicitly at their owner, including draft read/list, KV bulk lookup and the native version check; KV value sizes are unbounded despite the key-count cap. Manual Retry cancels superseded reads, lets the old resume unwind and then starts a fresh resume; it preserves mutating requests and rejects stale resume materialization/checkpoints. Supersession is not a failed attempt: the existing API and invalidation retry owners immediately run a replacement without backoff or consuming their failure budget. A still-stalled replacement remains owned by that retry cycle. Read inactivity timeouts are logged by default and enter the existing retry owners.
+
+The development UI supervises HTTP readiness separately from active sync socket recovery. A failed socket dial retains escalating demand through the shared managed connection policy without blocking healthy HTTP requests. Known HTTP unavailability suspends the socket lifecycle until reachability returns; an actual socket connection resets socket retry escalation. HTTP response reports carry the supervisor scope captured before dispatch. An authenticated 401, gateway 502/504, or 503 with a valid `Retry-After` or explicit restart marker can update endpoint readiness. Resource 403, generic 500, and unqualified route-level 503 responses remain operation-scoped. Dedicated authentication probes classify their own endpoint evidence, including account-level rejection.
 
 `decideMessageCatchUpPolicy` owns hosted transcript catch-up decisions. The existing defaults allow three incremental pages, with a separate large-gap threshold of 500 sequence positions and a long-offline threshold of 30 minutes. Those positions are not necessarily main-transcript rows. Large backlogs go directly to the latest page when following the live tail; history readers defer forward loading. An explicit reopen can probe one page even when the session hint appears current. Known deferred backlog remains authoritative when that hint is stale; a failed catch-up read retains that demand for retry.
 

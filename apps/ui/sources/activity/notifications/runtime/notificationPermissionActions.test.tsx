@@ -537,8 +537,7 @@ describe('Native notification permission entry points', () => {
         vi.useFakeTimers();
         try {
             const pending = executeNotificationPermissionAction(parsed());
-            await vi.advanceTimersByTimeAsync(0);
-            expect(encrypt).toHaveBeenCalledTimes(1);
+            await vi.waitFor(() => expect(encrypt).toHaveBeenCalledTimes(1));
             expect(boundary.disconnect).not.toHaveBeenCalled();
             await vi.advanceTimersByTimeAsync(30_000);
             await expect(pending).resolves.toMatchObject({ status: 'not_sent' });

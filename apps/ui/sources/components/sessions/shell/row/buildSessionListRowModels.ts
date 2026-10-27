@@ -13,6 +13,7 @@ import {
 } from '@/sync/domains/session/organization/attentionStanding';
 import { formatShortRelativeTimeAt } from '@/utils/time/formatShortRelativeTime';
 import { sessionTagKey } from '../sessionTagUtils';
+import { areSessionAppearanceColorsEqual, sessionAppearanceColorKey } from '@/sync/domains/session/organization/appearanceColor';
 
 type CacheEntry = Readonly<{
     model: SessionListRowModel;
@@ -242,6 +243,7 @@ function buildInputSignature(input: Readonly<{
     appendSignaturePart(parts, input.snapshot.messages?.messagesVersion ?? null);
     appendSignaturePart(parts, input.snapshot.pending?.messages.length ?? null);
     appendSignaturePart(parts, input.snapshot.draft?.preview ?? null);
+    appendSignaturePart(parts, sessionAppearanceColorKey(input.snapshot.appearanceColor));
     return parts.join('|');
 }
 
@@ -282,6 +284,7 @@ function canReuseEntry(
         && entry.messagesRef === snapshot.messages
         && entry.pendingRef === snapshot.pending
         && entry.draftPreview === (snapshot.draft?.preview ?? null)
+        && areSessionAppearanceColorsEqual(entry.model.appearanceColor, snapshot.appearanceColor)
         && isCachedActivityFresh(entry.model, settings.relativeNowMs)
         && isCachedRuntimeFresh(entry.model, settings.runtimeNowMs);
 }
@@ -304,6 +307,7 @@ function canReuseEntryWithoutSignature(input: Readonly<{
         && entry.messagesRef === input.snapshot.messages
         && entry.pendingRef === input.snapshot.pending
         && entry.draftPreview === (input.snapshot.draft?.preview ?? null)
+        && areSessionAppearanceColorsEqual(entry.model.appearanceColor, input.snapshot.appearanceColor)
         && areStablePresentationSettingsRefsEqual(entry.stableSettings, input.stableSettings)
         && isCachedActivityFresh(entry.model, input.settings.relativeNowMs)
         && isCachedRuntimeFresh(entry.model, input.settings.runtimeNowMs);

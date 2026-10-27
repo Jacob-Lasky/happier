@@ -26,21 +26,17 @@ import type { Settings } from '@/sync/domains/settings/settings';
 import { canonicalizeServerUrl } from '@/sync/domains/server/url/serverUrlCanonical';
 import {
     type ManagedConnectionState,
-    type ManagedConnectionTransport,
-    type TransportDisconnectEvent,
+    type ManagedConnectionSupervisor,
 } from '@happier-dev/connection-supervisor';
 import {
-    reportServerUnreachable,
     startServerReachabilitySupervisor,
     stopServerReachabilitySupervisor,
     subscribeServerReachabilityState,
 } from '@/sync/runtime/connectivity/serverReachabilitySupervisorPool';
 import { runtimeFetchWithServerReachability } from '@/sync/runtime/connectivity/serverReachabilityRuntimeFetch';
+import { createSocketConnectionSupervisor } from '@/sync/runtime/connectivity/createSocketConnectionSupervisor';
 import { startRuntimeActiveGatedInterval } from '@/utils/runtime/isRuntimeActive';
-import {
-    createConcurrentServerSocketTransport,
-    type ConcurrentServerSocket,
-} from './concurrentServerConnections/createConcurrentServerSocketTransport';
+import { createConcurrentServerSocketTransport } from './concurrentServerConnections/createConcurrentServerSocketTransport';
 
 type ConcurrentTarget = Readonly<{
     id: string;
@@ -60,11 +56,9 @@ type ManagedConcurrentServer = {
     serverUrl: string;
     serverName: string;
     credentials: AuthCredentials;
-    socket: ConcurrentServerSocket | null;
-    socketTransport: ManagedConnectionTransport | null;
+    socketSupervisor: ManagedConnectionSupervisor | null;
     reachabilityUnsubscribe: (() => void) | null;
     reachabilityState: ManagedConnectionState;
-    detachSocketTransportListeners: Array<() => void>;
     encryption: Encryption | null;
     sessionDataKeys: Map<string, Uint8Array>;
     sessionDataKeyEnvelopes: Map<string, string>;
@@ -362,14 +356,8 @@ function stopManagedServer(serverId: string): void {
     entry.reachabilityUnsubscribe?.();
     entry.reachabilityUnsubscribe = null;
     void stopServerReachabilitySupervisor(entry.serverUrl);
-    entry.socket = null;
-    for (const detach of entry.detachSocketTransportListeners.splice(0)) {
-        detach();
-    }
-    const transport = entry.socketTransport;
-    entry.socketTransport = null;
-    void transport?.disconnect({ intentional: true });
-    void transport?.destroy();
+    void entry.socketSupervisor?.stop();
+    entry.socketSupervisor = null;
     managedServers.delete(serverId);
 }
 
@@ -380,8 +368,7 @@ function createManagedServer(target: ConcurrentTarget, credentials: AuthCredenti
         serverUrl: normalizedServerUrl,
         serverName: target.serverName,
         credentials,
-        socket: null,
-        socketTransport: null,
+        socketSupervisor: null,
         reachabilityUnsubscribe: null,
         reachabilityState: {
             phase: 'idle',
@@ -392,7 +379,6 @@ function createManagedServer(target: ConcurrentTarget, credentials: AuthCredenti
             lastDisconnectedAt: null,
             lastErrorMessage: null,
         },
-        detachSocketTransportListeners: [],
         encryption: null,
         sessionDataKeys: new Map<string, Uint8Array>(),
         sessionDataKeyEnvelopes: new Map<string, string>(),
@@ -405,51 +391,35 @@ function createManagedServer(target: ConcurrentTarget, credentials: AuthCredenti
     // Those events can be high-frequency (presence/activity), and full refresh loops are
     // expensive + noisy. Periodic refresh handles eventual consistency for non-active servers.
 
+    // A subscription can synchronously deliver an already-online verdict.
+    managedServers.set(target.id, entry);
     entry.reachabilityUnsubscribe = subscribeServerReachabilityState(normalizedServerUrl, (state) => {
         if (!isManagedServerActive(entry)) return;
         entry.reachabilityState = state;
 
-        if (state.phase === 'auth_failed') {
-            updateConcurrentSessionListCache(entry.id, null);
-            updateConcurrentMachineListCache({
-                serverId: entry.id,
-                machines: null,
-                status: 'signedOut',
-            });
-            void entry.socketTransport?.disconnect({ intentional: true });
-            return;
-        }
-
         if (state.phase !== 'online') {
-            void entry.socketTransport?.disconnect({ intentional: true });
+            const supervisor = entry.socketSupervisor;
+            entry.socketSupervisor = null;
+            void supervisor?.stop();
+            if (state.phase === 'auth_failed') {
+                updateConcurrentSessionListCache(entry.id, null);
+                updateConcurrentMachineListCache({ serverId: entry.id, machines: null, status: 'signedOut' });
+            }
             return;
         }
 
-        if (!entry.socketTransport) {
-            const { socket, transport } = createConcurrentServerSocketTransport({
-                serverUrl: normalizedServerUrl,
-                token: credentials.token,
+        if (!entry.socketSupervisor) {
+            entry.socketSupervisor = createSocketConnectionSupervisor({
+                createTransport: () => createConcurrentServerSocketTransport({
+                    serverUrl: normalizedServerUrl, token: credentials.token,
+                }).transport,
+                onConnected: () => queueRefresh(entry),
             });
-            entry.socket = socket;
-            entry.socketTransport = transport;
-
-            entry.detachSocketTransportListeners = [
-                transport.onConnected(() => {
-                    queueRefresh(entry);
-                }),
-                transport.onDisconnected((event: TransportDisconnectEvent) => {
-                    if (event.intentional) return;
-                    reportServerUnreachable(normalizedServerUrl, event.error ?? new Error(event.reason ?? 'socket disconnect'));
-                }),
-                transport.onError((error: unknown) => {
-                    reportServerUnreachable(normalizedServerUrl, error);
-                }),
-            ];
         }
 
-        if (entry.socketTransport.isConnected() !== true) {
-            void entry.socketTransport.connect();
-        }
+        void entry.socketSupervisor.start().catch((error: unknown) => {
+            console.warn('[concurrentSessionCache] Socket startup failed', error);
+        });
     });
 
     void startServerReachabilitySupervisor({ serverUrl: normalizedServerUrl, token: credentials.token });
@@ -520,7 +490,6 @@ async function reconcileConcurrentServers(): Promise<void> {
             stopManagedServer(target.id);
         }
         const next = createManagedServer(target, credentials);
-        managedServers.set(target.id, next);
         queueRefresh(next);
     }
 }

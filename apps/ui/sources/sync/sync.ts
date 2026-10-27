@@ -441,7 +441,7 @@ import {
     materializeExactSessionDraft,
 } from '@/sync/ops/sessionDrafts/sessionDraftRepository';
 import { migrateLegacySessionDrafts } from '@/sync/domains/input/drafts/sessionDraftLegacyMigration';
-import { serverFetch } from './http/client';
+import { abortServerFetches, serverFetch, type ServerReadRequestInit } from './http/client';
 import { logNativeUpdateFetchFailure } from '@/sync/runtime/nativeUpdate/logNativeUpdateFetchFailure';
 import {
     buildUpdatedSessionFromSocketUpdate,
@@ -901,6 +901,8 @@ type SessionOrganizationSyncState = Pick<
     | 'sessionOrganizationTagsByTagKey'
     | 'sessionOrganizationTagAssignmentsBySessionKey'
     | 'sessionOrganizationAttentionStandingsBySessionKey'
+    | 'sessionOrganizationAppearancesBySessionKey'
+    | 'sessionOrganizationSessionAppearancesSupportedByServerId'
     | 'sessionOrganizationOrderEntriesByScopeKey'
     | 'sessionOrganizationLabelsByLabelKey'
 >;
@@ -920,6 +922,8 @@ function buildOrganizationProjectionForServer(
         tagsByTagKey: state.sessionOrganizationTagsByTagKey,
         tagAssignmentsBySessionKey: state.sessionOrganizationTagAssignmentsBySessionKey,
         attentionStandingsBySessionKey: state.sessionOrganizationAttentionStandingsBySessionKey,
+        appearancesBySessionKey: state.sessionOrganizationAppearancesBySessionKey,
+        sessionAppearancesSupportedByServerId: state.sessionOrganizationSessionAppearancesSupportedByServerId,
         orderEntriesByScopeKey: state.sessionOrganizationOrderEntriesByScopeKey,
         labelsByLabelKey: state.sessionOrganizationLabelsByLabelKey,
     }, normalizedServerId);
@@ -4381,7 +4385,7 @@ class Sync {
         return Boolean(storage.getState().sessions[sessionId]);
     }
 
-    private createSessionRequest = (sessionId: string): ((path: string, init?: RequestInit) => Promise<Response>) => {
+    private createSessionRequest = (sessionId: string): ((path: string, init?: ServerReadRequestInit) => Promise<Response>) => {
         return createSessionRequestWithServerScope({
             serverId: resolvePreferredServerIdForSessionId(sessionId),
             activeRequest: (path, init) => apiSocket.request(path, init),
@@ -4498,7 +4502,9 @@ class Sync {
 
     private createSessionMessagesRequest = (sessionId: string): ((path: string) => Promise<Response>) => {
         const request = this.createSessionRequest(sessionId);
-        return (path: string) => request(path, { method: 'GET' });
+        // The messages route enforces limit <= 500 (default 150). Unlike unpaged session
+        // metadata, these pages may use a native pre-resolution inactivity window.
+        return (path: string) => request(path, { method: 'GET', responseSizeBounded: true });
     }
 
     /**
@@ -4530,6 +4536,11 @@ class Sync {
     }
 
       public retryNow = () => {
+          // Changes adapters return an error result on cancellation; retire the resume guard
+          // first so a superseded read cannot launch fallback materialization.
+          this.manualResumeGeneration += 1;
+          const supersededResume = this.resumeInFlight;
+          abortServerFetches('manual-retry', { readOnly: true });
           let reconnectSocket = false;
           try {
               storage.getState().clearSyncError();
@@ -4550,7 +4561,10 @@ class Sync {
           } catch {
               // ignore
           }
-          const resume = this.resumeSync('manual');
+          // Unwind the existing finally/dedupe owners before acquiring them for a fresh run.
+          const resume = supersededResume
+              ? supersededResume.catch(() => {}).then(() => this.resumeSync('manual'))
+              : this.resumeSync('manual');
           fireAndForget(resume, { tag: 'Sync.resumeSync.manual' });
           if (reconnectSocket) {
               try {
@@ -4562,6 +4576,8 @@ class Sync {
           }
       }
 
+      private manualResumeGeneration = 0;
+
       public resumeSync = (reason: 'app-foreground' | 'socket-reconnect' | 'manual' | 'server-reachable' | 'changes-catch-up'): Promise<void> => {
           return runWithInFlightDedupe(
               {
@@ -4571,7 +4587,9 @@ class Sync {
                   },
               },
               async () => {
-                  const shouldContinue = this.createServerScopeGuard();
+                  const generation = this.manualResumeGeneration;
+                  const isServerScopeCurrent = this.createServerScopeGuard();
+                  const shouldContinue = () => generation === this.manualResumeGeneration && isServerScopeCurrent();
                   if (
                       (reason === 'socket-reconnect' || reason === 'server-reachable' || reason === 'changes-catch-up')
                       && !this.isForeground
@@ -5332,7 +5350,7 @@ class Sync {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(requestBody),
-            }, { includeAuth: false });
+            }, { includeAuth: false, recoveryRead: 'unbounded' });
 
             if (!response.ok) {
                 log.log(`[fetchNativeUpdate] Request failed: ${response.status}`);
@@ -7678,9 +7696,17 @@ class Sync {
                     });
                 },
                 snapshotRefresh: async () => {
+                    if (!shouldContinue()) {
+                        aborted = true;
+                        return { status: 'error' };
+                    }
                     await this.snapshotRefreshOnResume({ mode: 'long-offline', reason: 'snapshot-refresh' });
                 },
                 applyPlanned: async (planned) => {
+                    if (!shouldContinue()) {
+                        aborted = true;
+                        return { status: 'partial', safeAdvanceCursor: null };
+                    }
                     return await applyPlannedChangeActions({
                         planned,
                         credentials: this.credentials,
@@ -7758,6 +7784,7 @@ class Sync {
                                     includeTags: plan.includeTags,
                                     includeLabels: plan.includeLabels,
                                     includeAttentionStandings: true,
+                                    includeSessionAppearances: true,
                                     includeAttentionReminderTimes: true,
                                     assignmentSessionIds: plan.assignmentSessionIds,
                                     folderIds: plan.folderIds,

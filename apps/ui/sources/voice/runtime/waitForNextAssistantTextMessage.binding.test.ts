@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createSessionFixture } from '@/dev/testkit/fixtures/sessionFixtures';
-import { createSessionMessagesFixture } from '@/dev/testkit/fixtures/transcriptFixtures';
+import { createSessionMessagesFixture, createToolCallMessageFixture } from '@/dev/testkit/fixtures/transcriptFixtures';
 import type { Message } from '@/sync/domains/messages/messageTypes';
 import { storage } from '@/sync/domains/state/storageStore';
 import type { Session } from '@/sync/domains/state/storageTypes';
@@ -96,6 +96,52 @@ describe('voice reply binding through the real transcript store', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(settled).toBe('Both checks pass.');
     await waiting;
+  });
+
+  it('never speaks a delivered subagent report as the assistant reply', async () => {
+    publish(turns('turn-0', 'completed', [1], 2), []);
+    const baseline = captureSessionTurnBaseline('s1');
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    });
+    publish(turns('turn-voice', 'completed', [12], 15), [
+      user('u1', 'voice-input', 12),
+      { kind: 'agent-text', id: 'report', text: 'Subagent findings.', seq: 13, createdAt: 1, localId: null,
+        peer: { name: 'general-purpose', handback: true } },
+      agent('a1', 'The fix is ready.', 14),
+    ]);
+    await expect(waiting).resolves.toBe('The fix is ready.');
+  });
+
+  it.each([false, true])('retains an answer before a late peer delivery unless the assistant answers again (laterReply=%s)', async laterReply => {
+    publish(turns('turn-0', 'completed', [1], 2), []);
+    const baseline = captureSessionTurnBaseline('s1');
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    });
+    publish(turns('turn-voice', 'completed', [12], 16), [
+      user('u1', 'voice-input', 12),
+      agent('a1', 'The fix is ready.', 13),
+      { kind: 'agent-text', id: 'report', text: 'Subagent findings.', seq: 14, createdAt: 1, localId: null,
+        peer: { name: 'general-purpose', handback: true } },
+      ...(laterReply ? [agent('a2', 'The final checks pass too.', 15)] : []),
+    ]);
+    await expect(waiting).resolves.toBe(laterReply ? 'The final checks pass too.' : 'The fix is ready.');
+  });
+
+  it.each(['tool', 'user'] as const)('clears the pre-peer fallback when a later %s starts new work', async boundary => {
+    publish(turns('turn-0', 'completed', [1], 2), []);
+    const baseline = captureSessionTurnBaseline('s1');
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    });
+    publish(turns('turn-voice', 'completed', [12], 16), [
+      user('u1', 'voice-input', 12), agent('a1', 'Let me check.', 13),
+      { kind: 'agent-text', id: 'report', text: 'Subagent findings.', seq: 14, createdAt: 1, localId: null,
+        peer: { name: 'general-purpose', handback: true } },
+      boundary === 'tool' ? createToolCallMessageFixture({ id: 'tool', seq: 15 }) : user('u2', 'followup', 15),
+    ]);
+    await expect(waiting).resolves.toBeNull();
   });
 
   it('does not mistake another client\'s terminal turn for the queued voice input', async () => {

@@ -57,6 +57,7 @@ const tokenStorageMocks = vi.hoisted(() => ({
     getCredentialsForServerUrl: vi.fn(async () => ({ token: 'token-a', secret: 'secret-a' })),
 }));
 let sessionOrganizationProjection: SessionOrganizationProjection | null = null;
+let resetOrganizationLabels: (() => void) | null = null;
 
 const groupKey = 'server:server_a:day:2026-02-17';
 
@@ -409,6 +410,9 @@ function createEmptySessionOrganizationProjection(): SessionOrganizationProjecti
         folderAssignmentsBySessionId: {},
         tagsById: {},
         tagAssignmentsBySessionId: {},
+        appearancesBySessionId: {},
+        sessionAppearancesBySessionId: {},
+        sessionAppearancesSupported: false,
         attentionStandingsBySessionId: {},
         orderEntriesByScopeKey: {},
         labelsByLabelKey: {},
@@ -442,12 +446,17 @@ describe('SessionsList pinning + per-group ordering', () => {
 
     afterEach(() => {
         standardCleanup();
+        resetOrganizationLabels?.();
+        resetOrganizationLabels = null;
     });
 
     it('carries the stored attention standing into every row model it builds', async () => {
         sessionListAttentionPromotionMode = 'global';
         sessionOrganizationProjection = {
             ...createEmptySessionOrganizationProjection(),
+            appearancesBySessionId: {},
+            sessionAppearancesBySessionId: {},
+            sessionAppearancesSupported: false,
             attentionStandingsBySessionId: {
                 sess_a: { sessionId: 'sess_a', standing: true, updatedAt: 10 },
             },
@@ -490,6 +499,9 @@ describe('SessionsList pinning + per-group ordering', () => {
         sessionOrganizationProjection = {
             ...createEmptySessionOrganizationProjection(),
             version: 3,
+            appearancesBySessionId: {},
+            sessionAppearancesBySessionId: {},
+            sessionAppearancesSupported: false,
             attentionStandingsBySessionId: {
                 sess_a: { sessionId: 'sess_a', standing: true, updatedAt: 10 },
             },
@@ -504,6 +516,9 @@ describe('SessionsList pinning + per-group ordering', () => {
         sessionOrganizationProjection = {
             ...createEmptySessionOrganizationProjection(),
             version: 4,
+            appearancesBySessionId: {},
+            sessionAppearancesBySessionId: {},
+            sessionAppearancesSupported: false,
             attentionStandingsBySessionId: {
                 sess_a: { sessionId: 'sess_a', standing: true, updatedAt: 10 },
             },
@@ -859,6 +874,10 @@ describe('SessionsList pinning + per-group ordering', () => {
                 },
             },
         };
+        const { storage } = await import('@/sync/domains/state/storageStore');
+        const previousLabels = storage.getState().sessionOrganizationLabelsByLabelKey;
+        resetOrganizationLabels = () => storage.setState({ sessionOrganizationLabelsByLabelKey: previousLabels });
+        storage.setState({ sessionOrganizationLabelsByLabelKey: sessionOrganizationProjection.labelsByLabelKey });
         mockMachinesState.current = [
             { id: 'machine-live-1', metadata: { displayName: 'Rebound workstation' } },
             { id: 'machine-live-2', metadata: { host: 'rebound-2.local' } },

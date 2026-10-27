@@ -1,12 +1,12 @@
 import { runtimeFetch } from '@/utils/system/runtimeFetch';
+import { withServerReadLifetime, type ServerReadRequestInit } from '@/sync/http/client';
 import { withConnectedServiceReaderSupport } from '@happier-dev/protocol';
 
 import {
-    reportServerAuthFailed,
+    createServerReachabilityResponseReporter,
     reportServerUnreachable,
     waitForServerReachable,
 } from './serverReachabilitySupervisorPool';
-import { isAuthenticationResponseStatus } from './authErrors';
 import { readServerReachabilityWaitTimeoutMs } from './serverReachabilityTuning';
 import { observeUiClientUpgradeRequiredResponse } from '@/sync/runtime/clientCompatibility/uiClientUpgradeRequired';
 
@@ -36,16 +36,27 @@ function redactUrlForError(raw: string): string {
     }
 }
 
-export async function runtimeFetchWithServerReachability(params: Readonly<{
+type ServerReachabilityFetchParams = Readonly<{
     serverUrl: string;
     token: string | null;
     url: string;
-    init: RequestInit;
+    init: ServerReadRequestInit;
     timeoutMs?: number;
     signal?: AbortSignal;
     /** Explicit OS task work; do not resume the app's foreground supervisors. */
     networkMode?: 'background-task';
-}>): Promise<Response> {
+}>;
+
+export function runtimeFetchWithServerReachability(params: ServerReachabilityFetchParams): Promise<Response> {
+    const method = String(params.init.method ?? 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') {
+        return withServerReadLifetime<Response>({ ...params.init, signal: params.signal ?? params.init.signal },
+            async (init, consume) => consume(await performReachableFetch({ ...params, init })));
+    }
+    return performReachableFetch(params);
+}
+
+async function performReachableFetch(params: ServerReachabilityFetchParams): Promise<Response> {
     const headers = new Headers(params.init.headers ?? {});
     const explicitAuthHeader = headers.get('Authorization') ?? '';
     const bearerTokenFromHeader = (() => {
@@ -93,13 +104,12 @@ export async function runtimeFetchWithServerReachability(params: Readonly<{
         });
     }
 
+    const reportResponse = createServerReachabilityResponseReporter(params.serverUrl, hasAuth);
     try {
         const requestUrl = hasAuth ? withConnectedServiceReaderSupport(params.url) : params.url;
         const response = await runtimeFetch(requestUrl, { ...params.init, headers });
         await observeUiClientUpgradeRequiredResponse(response);
-        if (hasAuth && isAuthenticationResponseStatus(response.status)) {
-            reportServerAuthFailed(params.serverUrl, response.status);
-        }
+        reportResponse(response);
         return response;
     } catch (error) {
         // The caller owns intentional cancellation; it does not establish a reachability failure.

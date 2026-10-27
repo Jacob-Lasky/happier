@@ -2,6 +2,7 @@ import { providers } from '@happier-dev/agents';
 import type { SessionMessageRole } from '@happier-dev/protocol';
 
 import type { MessageMeta } from '../domains/messages/messageMetaTypes';
+import type { PeerMessageSender } from '../domains/messages/messageTypes';
 import type { TranscriptObservationMetadata } from '../domains/messages/transcriptObservationProvenance';
 import {
     hasSyntheticNoResponseMeta,
@@ -11,7 +12,7 @@ import {
 import { markUnsupportedContentMeta } from '../domains/messages/unsupportedContentMeta';
 import { hasSessionMediaRenderItems } from '../domains/sessionMedia/sessionMediaMessageMeta';
 import { rawRecordSchema, type AgentEvent, type RawAgentContent, type RawRecord, type UsageData } from './schemas';
-import { isSessionToolAnswerDeliveryMeta, normalizeClaudeActivityStatusSignal } from '@happier-dev/protocol';
+import { isSessionToolAnswerDeliveryMeta, normalizeClaudeActivityStatusSignal, readClaudePeerMessage } from '@happier-dev/protocol';
 import { buildUsageDataFromTokenCountMessage } from './tokenCountUsage';
 
 // Normalized types
@@ -23,6 +24,7 @@ type NormalizedAgentContent =
         text: string;
         uuid: string;
         parentUUID: string | null;
+        peer?: PeerMessageSender;
     } | {
         type: 'thinking';
         thinking: string;
@@ -688,6 +690,28 @@ export function normalizeRawMessage(
                         : undefined;
                   const sidechainId = metaSidechainId ?? getOutputSidechainId(raw.content.data) ?? claudeParentToolUseId;
                 const isSidechain = Boolean(sidechainId) || getOutputIsSidechain(raw.content.data) || metaIsSidechain;
+
+                // Teammate and subagent deliveries belong to the agent's conversation, not the user's.
+                const peerMessage = readClaudePeerMessage(raw.content.data);
+                if (peerMessage) {
+                    const normalized = {
+                        id,
+                        ...(seq !== undefined ? { seq } : {}),
+                        localId,
+                        createdAt,
+                        role: 'agent',
+                        sidechainId,
+                        isSidechain,
+                        content: [{
+                            type: 'text',
+                            text: peerMessage.text,
+                            uuid: outputUuid,
+                            parentUUID: raw.content.data.parentUuid ?? null,
+                            peer: { name: peerMessage.name, handback: peerMessage.handback },
+                        }],
+                    } satisfies NormalizedMessage;
+                    return filterNormalizedEventRoleOutput(normalized, opts?.messageRole);
+                }
 
 	                // Handle sidechain user messages
 	                if (isSidechain && raw.content.data.message && typeof raw.content.data.message.content === 'string') {

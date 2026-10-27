@@ -68,7 +68,7 @@ import {
     bootstrapAccountSettingsContext,
     refreshActiveAccountSettingsFromServer,
 } from '@/settings/accountSettings/bootstrapAccountSettingsContext';
-import { AccountSettingsV2GetResponseSchema } from '@happier-dev/protocol';
+import { AccountSettingsV2GetResponseSchema, readClaudePeerMessage } from '@happier-dev/protocol';
 import {
     getActiveAccountSettingsSnapshot,
     subscribeActiveAccountSettingsSnapshot,
@@ -4186,7 +4186,9 @@ export class ApiSessionClient extends EventEmitter {
             body.type === 'user' &&
             typeof body.message.content === 'string' &&
             body.isSidechain !== true &&
-            body.isMeta !== true
+            body.isMeta !== true &&
+            // Peer deliveries keep their sender provenance in the raw output envelope.
+            !readClaudePeerMessage(body)
         ) {
             content = this.buildUserTextMessageContent(body.message.content, meta);
         } else {

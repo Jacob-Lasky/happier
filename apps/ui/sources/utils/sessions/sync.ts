@@ -1,4 +1,4 @@
-import { createBackoff, delay, linearBackoffDelay } from "@/utils/timing/time";
+import { createBackoff, delay, linearBackoffDelay, SupersededOperationError } from "@/utils/timing/time";
 import type { PauseController } from "@/utils/timing/pauseController";
 
 type InvalidateSyncCycleOutcome =
@@ -227,6 +227,7 @@ export class InvalidateSync {
                 await this._command();
                 return;
             } catch (e) {
+                if (e instanceof SupersededOperationError) continue;
                 failuresCount += 1;
 
                 if (!this._shouldRetry(e, failuresCount)) {

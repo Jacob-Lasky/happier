@@ -20,6 +20,12 @@ function buildChange(params: {
 }
 
 describe('planSyncActionsFromChanges', () => {
+    it('refreshes appearance organization data without fetching unchanged session records', () => {
+        const planned = planSyncActionsFromChanges([buildChange({ cursor: 1, kind: 'session', entityId: 's1', hint: { sessionOrganization: true, scope: 'sessionAppearances', sessionIds: ['s1'] } })]);
+        expect(planned.sessionOrganization).toMatchObject({ mode: 'snapshot', assignmentSessionIds: ['s1'] });
+        expect(planned.invalidate.sessions).toBe(false);
+        expect(planned.sessionIdsToCatchUp).toEqual([]);
+    });
     it('plans session catch-up and invalidations', () => {
         const changes: ApiChangeEntry[] = [
             buildChange({ cursor: 1, kind: 'session', entityId: 's1' }),

@@ -7,7 +7,7 @@ import { FloatingOverlay, type FloatingOverlayArrow } from '@/components/ui/over
 import { t } from '@/text';
 import type { SelectableRowVariant } from '@/components/ui/lists/SelectableRow';
 import { SelectableMenuResults } from '@/components/ui/forms/dropdown/SelectableMenuResults';
-import type { SelectableMenuItem } from '@/components/ui/forms/dropdown/selectableMenuTypes';
+import type { SelectableMenuItem, SelectableMenuSwatch } from '@/components/ui/forms/dropdown/selectableMenuTypes';
 import { useSelectableMenu, CREATE_ITEM_ID } from '@/components/ui/forms/dropdown/useSelectableMenu';
 import { Item, type ItemProps } from '@/components/ui/lists/Item';
 import { useResolvedItemDensity } from '@/components/ui/lists/useResolvedItemDensity';
@@ -17,6 +17,7 @@ import { renderDropdownItemTriggerRightElement } from '@/components/ui/forms/dro
 import { KeyHint } from '@/components/ui/keyboard/KeyHint';
 import { useScrollRectIntoViewRegistry } from '@/components/ui/scroll/useScrollRectIntoView';
 import { Icon } from '@/components/ui/icons/Icon';
+import { ActivitySpinner, iconMatchedSpinnerSize } from '@/components/ui/feedback/ActivitySpinner';
 
 const DROPDOWN_ACTION_FRAME_FALLBACK_MS = 100;
 
@@ -32,6 +33,15 @@ export type DropdownMenuItem = Readonly<{
     rowContainerStyle?: StyleProp<ViewStyle>;
     disabled?: boolean;
     submenu?: DropdownMenuSubmenu;
+    /** Present the item as a round colour choice instead of a text row (`title` stays its label). */
+    swatch?: SelectableMenuSwatch;
+    /**
+     * The item finishes its own work before the menu closes (it loads something first): selecting it
+     * leaves this menu and its parents open; the owner closes them when it is ready.
+     */
+    keepMenuOpen?: boolean;
+    /** The item's work is under way: its trailing slot shows the app's activity spinner. */
+    loading?: boolean;
 }>;
 
 export type DropdownMenuSubmenu = Readonly<{
@@ -42,6 +52,8 @@ export type DropdownMenuSubmenu = Readonly<{
     emptyLabel?: string | null;
     maxHeightCap?: number;
     maxWidthCap?: number;
+    /** Intent signal: the submenu is opening (preload what its items will need). */
+    onOpen?: () => void;
 }>;
 
 export type DropdownMenuCreateItemDisplay = Readonly<{
@@ -204,12 +216,23 @@ export type DropdownMenuProps = Readonly<{
      * When omitted, a simple string label is used.
      */
     createItemDisplay?: ((query: string) => DropdownMenuCreateItemDisplay) | null;
+    /** Set by a parent menu on its submenu: keyboard Left from the submenu returns to the parent. */
+    onKeyboardBack?: () => void;
 }>;
+
+const MENU_NAVIGATION_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter']);
+
+function isEditableKeyTarget(target: unknown): boolean {
+    const element = target as { tagName?: unknown; isContentEditable?: boolean } | null;
+    const tagName = String(element?.tagName ?? '').toLowerCase();
+    return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || element?.isContentEditable === true;
+}
 
 export function DropdownMenu(props: DropdownMenuProps) {
     const { theme } = useUnistyles();
     const anchorRef = React.useRef<View>(null);
     const resolvedAnchorRef = props.popoverAnchorRef ?? anchorRef;
+    const submenuAnchorsRef = React.useRef(new Map<string, React.RefObject<unknown>>());
     const [activeSubmenu, setActiveSubmenu] = React.useState<{
         itemId: string;
         anchorRef: React.RefObject<unknown>;
@@ -250,7 +273,10 @@ export function DropdownMenu(props: DropdownMenuProps) {
                 disabled: item.disabled,
                 left: item.icon ?? null,
                 rowContainerStyle: item.rowContainerStyle,
-                right: item.rightElement
+                swatch: item.swatch,
+                right: item.loading
+                    ? <ActivitySpinner size={iconMatchedSpinnerSize(16)} color={theme.colors.text.secondary} />
+                    : item.rightElement
                     ? item.rightElement
                     : hasSubmenu
                         ? <Icon name="caret-right" size={16} color={theme.colors.text.secondary} />
@@ -405,6 +431,16 @@ export function DropdownMenu(props: DropdownMenuProps) {
             : null,
     });
 
+    // A pointer open highlights nothing on swatches until the person hovers or uses the keyboard.
+    const [swatchHighlightVisible, setSwatchHighlightVisible] = React.useState(false);
+    React.useEffect(() => {
+        if (!props.open) setSwatchHighlightVisible(false);
+    }, [props.open]);
+    const handleResultsSelectionChange = React.useCallback((index: number) => {
+        setSwatchHighlightVisible(true);
+        setSelectedIndex(index);
+    }, [setSelectedIndex]);
+
     const resultScroll = useScrollRectIntoViewRegistry({
         activeKey: selectedIndex >= 0 ? String(selectedIndex) : null,
         padding: 8,
@@ -418,7 +454,7 @@ export function DropdownMenu(props: DropdownMenuProps) {
         schedule(() => props.onCreateItem?.(query), DROPDOWN_ACTION_FRAME_FALLBACK_MS);
     }, [props, schedule, searchQuery]);
     const commitSelection = React.useCallback((itemId: string) => {
-        if (!closeOnSelect) {
+        if (!closeOnSelect || props.items.some((item) => item.id === itemId && item.keepMenuOpen)) {
             props.onSelect(itemId);
             return;
         }
@@ -426,26 +462,56 @@ export function DropdownMenu(props: DropdownMenuProps) {
         schedule(() => props.onSelect(itemId), DROPDOWN_ACTION_FRAME_FALLBACK_MS);
     }, [closeOnSelect, props, schedule]);
 
-    const handleKeyDown = React.useCallback((e: any) => {
-        if (Platform.OS !== 'web') return;
-        const key = e?.nativeEvent?.key;
-        if (typeof key !== 'string') return;
-        if (!['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(key)) return;
-        if (e?.nativeEvent?.isComposing === true || e?.isComposing === true) return;
-        e.preventDefault?.();
-        e.stopPropagation?.();
+    const dispatchMenuKey = (key: string) => {
+        setSwatchHighlightVisible(true);
         handleKeyPress(key, (item) => {
             if (item.id === CREATE_ITEM_ID) {
                 handleCreate();
                 return;
             }
-            if (item.hasSubmenu) return;
             commitSelection(item.id);
+        }, {
+            onOpenSubmenu: (item) => {
+                const anchorRef = submenuAnchorsRef.current.get(item.id);
+                if (anchorRef) handleOpenSubmenu(item.id, anchorRef);
+            },
+            onBack: props.onKeyboardBack,
         });
-    }, [commitSelection, handleCreate, handleKeyPress]);
+    };
+    const dispatchMenuKeyRef = React.useRef(dispatchMenuKey);
+    dispatchMenuKeyRef.current = dispatchMenuKey;
+    const handleKeyDown = React.useCallback((e: any) => {
+        if (Platform.OS !== 'web') return;
+        const key = e?.nativeEvent?.key;
+        if (typeof key !== 'string') return;
+        // Left/Right stay with the search field's caret.
+        if (!['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(key)) return;
+        if (e?.nativeEvent?.isComposing === true || e?.isComposing === true) return;
+        e.preventDefault?.();
+        e.stopPropagation?.();
+        dispatchMenuKeyRef.current(key);
+    }, []);
+    // Menus without a search field have no focused input, so the open top-most menu listens on the
+    // window. A parent defers to its open submenu; Escape stays with the Popover escape layer.
+    const listensToWindowKeys = Platform.OS === 'web' && props.open && !props.search && activeSubmenu === null;
+    React.useEffect(() => {
+        if (!listensToWindowKeys || typeof window === 'undefined') return;
+        const onWindowKeyDown = (event: KeyboardEvent) => {
+            if (!MENU_NAVIGATION_KEYS.has(event.key) || event.isComposing) return;
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+            if (isEditableKeyTarget(event.target)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            dispatchMenuKeyRef.current(event.key);
+        };
+        window.addEventListener('keydown', onWindowKeyDown, true);
+        return () => window.removeEventListener('keydown', onWindowKeyDown, true);
+    }, [listensToWindowKeys]);
     const handleOpenSubmenu = React.useCallback((itemId: string, itemAnchorRef: React.RefObject<unknown>) => {
         const item = props.items.find((candidate) => candidate.id === itemId);
         if (!item?.submenu || item.disabled) return;
+        // Intent signal for the submenu's owner; hover may repeat it, so owners keep it idempotent.
+        item.submenu.onOpen?.();
         const openFromAnchor = () => {
             setActiveSubmenu({ itemId, anchorRef: itemAnchorRef });
         };
@@ -476,9 +542,13 @@ export function DropdownMenu(props: DropdownMenuProps) {
         commitSelection(item.id);
     }, [commitSelection, handleCreate]);
     const handleSubmenuSelect = React.useCallback((itemId: string) => {
+        if (activeSubmenuItem?.submenu?.items.some((item) => item.id === itemId && item.keepMenuOpen)) {
+            props.onSelect(itemId);
+            return;
+        }
         setActiveSubmenu(null);
         commitSelection(itemId);
-    }, [commitSelection]);
+    }, [activeSubmenuItem, commitSelection, props]);
 
     const overlayArrowCfg = React.useMemo((): Omit<Exclude<FloatingOverlayArrow, boolean>, 'placement'> | null => {
         const arrow = props.overlayArrow;
@@ -582,7 +652,8 @@ export function DropdownMenu(props: DropdownMenuProps) {
                                 <SelectableMenuResults
                                     categories={filteredCategories}
                                     selectedIndex={selectedIndex}
-                                    onSelectionChange={setSelectedIndex}
+                                    onSelectionChange={handleResultsSelectionChange}
+                                    swatchHighlightVisible={swatchHighlightVisible}
                                     onPressItem={(item) => {
                                         handlePressMenuItem(item);
                                     }}
@@ -593,6 +664,7 @@ export function DropdownMenu(props: DropdownMenuProps) {
                                     rowKind={props.rowKind}
                                     itemProps={props.itemRowProps}
                                     registerItemLayout={resultScroll.registerItemLayout}
+                                    submenuAnchorRegistry={submenuAnchorsRef.current}
                                 />
                             </View>
                         </FloatingOverlay>
@@ -620,6 +692,7 @@ export function DropdownMenu(props: DropdownMenuProps) {
                                 itemRowProps={props.itemRowProps}
                                 showCategoryTitles={props.showCategoryTitles}
                                 allowEmptySelection={props.allowEmptySelection}
+                                onKeyboardBack={() => setActiveSubmenu(null)}
                             />
                         ) : null}
                     </>)}

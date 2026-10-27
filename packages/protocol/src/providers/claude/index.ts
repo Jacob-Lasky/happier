@@ -20,6 +20,11 @@ export {
   type ClaudeTodoWriteTodo,
 } from './sessionTasks.js';
 export {
+  formatClaudePeerMessageText,
+  readClaudePeerMessage,
+  type ClaudePeerMessage,
+} from './peerMessages.js';
+export {
   ClaudeSdkSkillsOptionSchema,
   normalizeClaudeSdkInitSkills,
   type ClaudeSdkSkillsOption,

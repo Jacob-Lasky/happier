@@ -128,6 +128,7 @@ export function runSidechainsPhase(params: Readonly<{
                             createdAt: msg.createdAt,
                             text: c.text,
                             isThinking: false,
+                            ...(c.peer ? { peer: c.peer } : {}),
                             tool: null,
                             event: null,
                             meta: msg.meta,

@@ -1,10 +1,13 @@
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { vi } from 'vitest';
+
 import {
   removeTestProcessTempDirsOnExit,
   resolveTestProcessTempDir,
 } from './testkit/fs/testProcessTempDirs';
+import { createWindowsServiceLauncherPeFixture } from './testkit/fs/windowsServiceLauncherFixture';
 
 // Many CLI tests touch persistence under `HAPPIER_HOME_DIR`. Our `.env.integration-test`
 // sets a shared value, which can cause cross-process races when Vitest runs with multiple
@@ -30,6 +33,20 @@ if (!opencodePath) {
   }
   process.env.HAPPIER_OPENCODE_PATH = stubPath;
 }
+
+// The packaged Windows service launcher is a release-built native asset that clean checkouts and
+// non-Windows runners do not have. Locate it at a per-process minimal launcher PE instead; the
+// real resolver and the native binary have their own cli-common and native harness tests.
+const windowsServiceLauncherFixturePath = join(binDir, 'happier-service-launcher.exe');
+mkdirSync(binDir, { recursive: true });
+writeFileSync(windowsServiceLauncherFixturePath, createWindowsServiceLauncherPeFixture());
+vi.mock('@/daemon/service/windowsServiceLauncher', async () => {
+  const { resolveWindowsServiceLauncherInstallSpec } = await import('@happier-dev/cli-common/service');
+  return {
+    resolveDaemonWindowsServiceLauncherInstallSpec: () =>
+      resolveWindowsServiceLauncherInstallSpec(windowsServiceLauncherFixturePath),
+  };
+});
 
 // Status reads refresh the CLI update cache in the background (a detached `self check`, which
 // reaches the network). Tests exercise that path through explicit params, never by spawning it.

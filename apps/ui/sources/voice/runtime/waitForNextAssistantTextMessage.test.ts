@@ -98,13 +98,15 @@ describe('waitForNextAssistantTextMessage', () => {
     await expect(waitPromise).resolves.toBe('assistant reply');
   });
 
-  it('does not treat thinking messages as assistant replies', () => {
+  it('excludes thinking and peer deliveries from recovered assistant replies', () => {
     state.current = {
       sessionMessages: {
         s1: {
           messages: [
             { id: 't1', kind: 'agent-text', text: 'pondering the request', isThinking: true },
+            { id: 'p1', kind: 'agent-text', text: 'A teammate update', peer: { name: 'reviewer', handback: false } },
             { id: 'a1', kind: 'agent-text', text: 'Here is the answer' },
+            { id: 'p2', kind: 'agent-text', text: 'A subagent report', peer: { name: 'worker', handback: true } },
           ],
         },
       },

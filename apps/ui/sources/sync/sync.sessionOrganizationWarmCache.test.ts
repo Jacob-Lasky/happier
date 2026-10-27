@@ -93,6 +93,7 @@ function organizationSnapshot(overrides?: { version?: number; pinnedSessionIds?:
             { scopeKind: 'group', scopeKey: 'pinned', itemKind: 'session', itemKey: 's_pinned', sortKey: '00000001' },
         ],
         labels: [],
+        sessionAppearances: [{ sessionId: 's_pinned', display: { t: 'plain', v: { color: { kind: 'custom', hex: '#123456' } } }, updatedAt: 5 }],
     };
 }
 
@@ -148,6 +149,8 @@ describe('session organization warm cache', () => {
         expect(state.sessionOrganizationSnapshotVersionByServerId[serverId]).toBe(7);
         expect(Object.keys(state.sessionOrganizationPinsBySessionKey)).toEqual([`${serverId}:s_pinned`]);
         expect(state.sessionFolderAssignmentsBySessionKey[`${serverId}:s_assigned`]).toBe('f1');
+        expect(state.sessionOrganizationAppearancesBySessionKey[`${serverId}:s_pinned`]?.display).toEqual({ t: 'plain', v: { color: { kind: 'custom', hex: '#123456' } } });
+        expect(state.sessionOrganizationSessionAppearancesSupportedByServerId[serverId]).toBe(true);
     });
 
     it('issues the session list page without waiting for the organization refresh once a warm organization exists', async () => {
@@ -203,6 +206,7 @@ describe('session organization warm cache', () => {
             version: 9,
             pins: [expect.objectContaining({ sessionId: 's_pinned' })],
             folderAssignments: [{ sessionId: 's_assigned', folderId: 'f1' }],
+            sessionAppearances: [expect.objectContaining({ sessionId: 's_pinned', display: { t: 'plain', v: { color: { kind: 'custom', hex: '#123456' } } } })],
         });
     }, 30_000);
 });

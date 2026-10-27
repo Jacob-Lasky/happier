@@ -138,7 +138,8 @@ describe('server-scoped session archive operations', () => {
             serverSelectionActiveTargetId: 'archive-group',
         });
         const network = createDeferred<Response>();
-        remoteRequest.mockImplementation(() => network.promise);
+        // Each fetch owns its Response; read owners consume bodies independently.
+        remoteRequest.mockImplementation(() => network.promise.then((settled) => settled.clone()));
         const activeSession = storage.getState().sessions[sessionId];
         const result = archiveSessionWithPendingState(sessionId, () => sessionArchiveWithServerScope(sessionId, { serverId: serverB.id }), serverB.id);
         const hook = await renderHook(() => {

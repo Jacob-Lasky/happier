@@ -25,7 +25,8 @@ export type SessionActionId =
     | 'ui.session.tags.edit'
     | 'ui.session.move-to-folder'
     | 'ui.session.set-attention-standing'
-    | 'ui.session.clear-attention-standing';
+    | 'ui.session.clear-attention-standing'
+    | 'ui.session.appearance-color';
 
 export type SessionAttentionStandingAction =
     | { kind: 'set-standing'; visible: true; targetStanding: true }

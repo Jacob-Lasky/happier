@@ -145,6 +145,8 @@ _.env.pipeline.production.local
 /apps/stack/output
 
 /packages/cli-common/.dist*
+/packages/cli-common/native/windows/bin/
+/service-launcher.obj
 /.playwright-mcp
 /.clawpatch
 /apply_fix.py

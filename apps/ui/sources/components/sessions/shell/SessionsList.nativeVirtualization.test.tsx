@@ -3484,7 +3484,6 @@ describe('SessionsList (native virtualization)', () => {
                     workspaceScopeHint: { serverId: 'server_a', machineId: 'machine-target', rootPath: '/repo' },
                 }}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}
@@ -3519,7 +3518,6 @@ describe('SessionsList (native virtualization)', () => {
                     serverName: 'Server A',
                 } as any}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}
@@ -3578,7 +3576,6 @@ describe('SessionsList (native virtualization)', () => {
                     serverName: 'Server A',
                 } as any}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}
@@ -3613,7 +3610,6 @@ describe('SessionsList (native virtualization)', () => {
                     serverName: 'Server A',
                 } as any}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}
@@ -3653,7 +3649,6 @@ describe('SessionsList (native virtualization)', () => {
                     },
                 } as any}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 workspaceFaviconsEnabled={true}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
@@ -3722,7 +3717,6 @@ describe('SessionsList (native virtualization)', () => {
                     },
                 } as any}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}
@@ -3964,7 +3958,6 @@ describe('SessionsList (native virtualization)', () => {
             <ProjectGroupHeader
                 item={projectHeaderItem}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}
@@ -4019,7 +4012,6 @@ describe('SessionsList (native virtualization)', () => {
             <ProjectGroupHeader
                 item={projectHeaderItem}
                 hasMultipleMachines={false}
-                workspaceLabelsV1={{}}
                 onRenameWorkspace={vi.fn()}
                 onResetWorkspaceName={vi.fn()}
                 onCreateSession={vi.fn()}

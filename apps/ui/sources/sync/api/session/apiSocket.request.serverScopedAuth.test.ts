@@ -202,6 +202,42 @@ describe('apiSocket.request server-scoped credentials', () => {
         await expect(b.json()).resolves.toEqual({ ok: true });
     });
 
+    it.each(['headers', 'body'] as const)('releases shared %s reads on Retry so the next caller dispatches afresh', async (phase) => {
+        let reads = 0;
+        let release: (() => void) | undefined;
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (getServerFetchUrl(input).pathname !== '/v1/held-read-705') return new Response('ok');
+            if (++reads > 1) return Response.json({ fresh: true });
+            if (phase === 'headers') return await new Promise<Response>((_resolve, reject) => {
+                release = () => reject(new DOMException('Aborted', 'AbortError'));
+                init?.signal?.addEventListener('abort', release, { once: true });
+            });
+            return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+                release = () => controller.error(new DOMException('Aborted', 'AbortError'));
+                init?.signal?.addEventListener('abort', release, { once: true });
+            } }));
+        }));
+        tokenStorageMock.getCredentialsForServerUrl.mockResolvedValue({ token: 'scoped-token', secret: 's' });
+        const { apiSocket } = await import('./apiSocket');
+        const { abortServerFetches } = await import('@/sync/http/client');
+        Reflect.set(apiSocket, 'config', { endpoint: 'https://stack.example.test', token: 'unused' });
+        const held = [apiSocket.request('/v1/held-read-705'), apiSocket.request('/v1/held-read-705')]
+            .map(promise => promise.then(() => null, (error: unknown) => error));
+        try {
+            await vi.waitFor(() => expect(reads).toBe(1));
+            abortServerFetches('manual-retry', { readOnly: true });
+            expect(await Promise.all(held)).toEqual([
+                expect.objectContaining({ name: 'ServerFetchReadSupersededError' }),
+                expect.objectContaining({ name: 'ServerFetchReadSupersededError' }),
+            ]);
+            await expect((await apiSocket.request('/v1/held-read-705')).json()).resolves.toEqual({ fresh: true });
+            expect(reads).toBe(2);
+        } finally {
+            release?.();
+            await Promise.all(held);
+        }
+    });
+
     it('reads current state for no-store requests while an older GET is outstanding', async () => {
         let release!: () => void;
         const gate = new Promise<void>((resolve) => { release = resolve; });

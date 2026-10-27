@@ -74,8 +74,9 @@ describe('buildCliBinaryArtifactPayload Windows rename fallback', () => {
         await writeRepoFile(join(cliDir, 'package.json'), `${JSON.stringify({
             name: '@happier-dev/cli',
             version: '0.0.0',
-            bundledDependencies: [],
+            bundledDependencies: ['@happier-dev/cli-common'],
             dependencies: {
+                '@happier-dev/cli-common': '0.0.0',
                 '@huggingface/transformers': '0.0.0',
                 'node-pty': '0.0.0',
                 '@homebridge/node-pty-prebuilt-multiarch': '0.0.0',
@@ -83,6 +84,19 @@ describe('buildCliBinaryArtifactPayload Windows rename fallback', () => {
             },
         }, null, 2)}\n`, older);
         await writeRepoFile(join(cliDir, 'src', 'index.ts'), 'export default "cli-source";\n', older);
+        // The release job places the built launcher here; the payload carries it beside the
+        // executable and inside the bundled cli-common that node-hosted package-dist resolves.
+        const launcherRelativePath = 'native/windows/bin/windows-x64/happier-service-launcher.exe';
+        await writeRepoFile(join(repoRoot, 'packages', 'cli-common', 'package.json'), `${JSON.stringify({
+            name: '@happier-dev/cli-common',
+            version: '0.0.0',
+            type: 'module',
+            main: './dist/index.js',
+            exports: { '.': './dist/index.js' },
+            happierWorkspaceBundleFiles: [launcherRelativePath],
+        }, null, 2)}\n`, older);
+        await writeRepoFile(join(repoRoot, 'packages', 'cli-common', 'dist', 'index.js'), 'export {};\n', older);
+        await writeRepoFile(join(repoRoot, 'packages', 'cli-common', ...launcherRelativePath.split('/')), 'launcher fixture', older);
         await writeRepoFile(join(abandonedSnapshotDir, 'index.mjs'), 'export const abandoned = true;\n', older);
         for (const sidecarPath of [
             ['apps', 'cli', 'scripts', 'childProcessOptions.cjs'],
@@ -165,6 +179,10 @@ module.exports = { unpackTools };
         await expect(readFile(join(payloadDir, 'package-dist', 'index.mjs'), 'utf8')).resolves.toBe('export const cli = "fresh";\n');
         await expect(readFile(join(cliDistDir, 'index.mjs'), 'utf8')).resolves.toBe('export const cli = "fresh";\n');
         expect(existsSync(join(payloadDir, 'happier.exe'))).toBe(true);
+        await expect(readFile(join(payloadDir, 'happier-service-launcher.exe'), 'utf8')).resolves.toBe('launcher fixture');
+        await expect(readFile(join(
+            payloadDir, 'node_modules', '@happier-dev', 'cli-common', 'native', 'windows', 'bin', 'windows-x64', 'happier-service-launcher.exe',
+        ), 'utf8')).resolves.toBe('launcher fixture');
         await expect(readFile(join(payloadDir, 'node_modules', 'sharp', 'index.js'), 'utf8'))
             .resolves.toBe('module.exports = {};\n');
         await expect(readFile(join(payloadDir, 'node_modules', '@img', 'sharp-win32-x64', 'index.js'), 'utf8'))

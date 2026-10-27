@@ -374,6 +374,8 @@ export function planSyncActionsFromChanges(changes: ApiChangeEntry[]): PlannedCh
             for (const scope of readHintOrderScopes(change)) organizationOrderScopes.set(`${scope.scopeKind}:${scope.scopeKey}`, scope);
             const hint = change.hint;
             if (isRecord(hint)) {
+                // Appearance hints refresh organization data above; row-local selectors consume
+                // it directly, so only placement-changing scopes need session invalidation.
                 if (hint.scope === 'pins' || hint.scope === 'attentionStandings') {
                     invalidateSessions = true;
                 }

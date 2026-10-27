@@ -49,6 +49,8 @@ import { planSessionTagDisplay } from './sessionTagPlacement';
 import { useIsTablet } from '@/utils/platform/responsive';
 import type { SessionStatus } from '@/utils/sessions/sessionUtils';
 import { useSessionRowActionMenu } from './row/actionMenu/useSessionRowActionMenu';
+import { useSessionRowAppearanceMenu, type SetSessionAppearance } from './row/actionMenu/useSessionRowAppearanceMenu';
+import { resolveSessionAppearanceColor } from '@/sync/domains/session/organization/appearanceColor';
 import { formatSessionAttentionReminderDateTime } from './row/actionMenu/sessionAttentionReminderAction';
 import { createSessionActionTarget } from '@/components/sessions/actions/sessionActionContext';
 import { executeSessionAction } from '@/components/sessions/actions/sessionActionExecution';
@@ -133,6 +135,8 @@ type SessionItemBaseProps = Readonly<{
     allKnownTags?: readonly string[];
     onSetTags?: ((newTags: string[]) => void) | null;
     tagsEnabled?: boolean;
+    /** The list's canonical session-colour writer; absent hides the row's colour action. */
+    onSetSessionAppearance?: SetSessionAppearance | null;
     selected?: boolean;
     isFirst?: boolean;
     isLast?: boolean;
@@ -172,6 +176,8 @@ type SessionItemRenderProps = Omit<SessionItemBaseProps, 'activityTimeMode' | 's
     hasUnreadMessages: boolean;
     draft: SessionListRowModel['draft'];
     reminder: SessionListRowModel['reminder'];
+    /** Effective colour (session override, else its project's). */
+    appearanceColor: SessionListRowModel['appearanceColor'];
     /** Live agent work in this session, already named. `null` unless the person opted in (R-8). */
     agentActivityLabel: string | null;
     isSessionIdentityLoading: boolean;
@@ -263,6 +269,24 @@ const stylesheet = StyleSheet.create((theme) => ({
     sessionItemSelected: {
         backgroundColor: theme.colors.surface.selected,
         borderColor: theme.dark ? theme.colors.surface.selected : theme.colors.surface.base,
+    },
+    // An inner pill, not the row border: the 2px border already carries selection, and a full-height
+    // edge would fight the rounded first/last corners. Insets scale with the row's density.
+    appearanceStripe: {
+        position: 'absolute',
+        left: 3,
+        top: '28%',
+        bottom: '28%',
+        width: 3,
+        borderRadius: 2,
+        // Same hairline the colour swatches use, so pale custom colours stay visible on the row.
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.border.default,
+    },
+    // Minimal rows pad only 8px; hug the row edge and thin the pill so the avatar keeps its breathing room.
+    appearanceStripeMinimal: {
+        left: 0,
+        width: 2,
     },
     sessionTitleSelected: {
         color: theme.colors.text.primary,
@@ -678,6 +702,7 @@ const SessionItemContent = React.memo(
         allKnownTags,
         onSetTags,
         tagsEnabled,
+        onSetSessionAppearance,
         selected,
         isFirst,
         isLast,
@@ -704,6 +729,7 @@ const SessionItemContent = React.memo(
         hasUnreadMessages,
         draft,
         reminder,
+        appearanceColor,
         agentActivityLabel,
         isSessionIdentityLoading,
         activityTimeLabel,
@@ -1064,6 +1090,20 @@ const SessionItemContent = React.memo(
             stopRowPressPropagation,
         ]);
 
+        const appearanceMenu = useSessionRowAppearanceMenu({
+            enabled: moreMenuOpen || contextMenuOpen,
+            serverId: serverId ?? null,
+            sessionId: resolvedSession.id,
+            theme,
+            effectiveColor: appearanceColor,
+            onSetSessionAppearance,
+        });
+        const appearanceStripeColor = resolveSessionAppearanceColor(appearanceColor, theme);
+        const closeRowMenus = React.useCallback(() => {
+            setMoreMenuOpen(false);
+            setContextMenuOpen(false);
+        }, [setContextMenuOpen]);
+
         const {
             tagMenuItems,
             handleTagMenuSelect,
@@ -1097,6 +1137,8 @@ const SessionItemContent = React.memo(
             },
             reminder,
             archiving: sessionStatus.state === 'archiving',
+            appearance: appearanceMenu,
+            closeMenus: closeRowMenus,
         });
 
         const handleSwipeAction = React.useCallback(async () => {
@@ -1315,6 +1357,19 @@ const SessionItemContent = React.memo(
                 onPressOut={enableLongPressContextMenu ? clearContextMenuPressInTimer : undefined}
                 onLongPress={enableLongPressContextMenu ? openContextMenuFromLongPress : undefined}
             >
+                {appearanceStripeColor ? (
+                    <View
+                        testID={`session-item-appearance-stripe:${resolvedSession.id}`}
+                        pointerEvents="none"
+                        accessible={false}
+                        importantForAccessibility="no-hide-descendants"
+                        style={[
+                            styles.appearanceStripe,
+                            isMinimal ? styles.appearanceStripeMinimal : null,
+                            { backgroundColor: appearanceStripeColor },
+                        ]}
+                    />
+                ) : null}
                 {shouldRenderSessionListIdentity || shouldRenderSelectionCheckbox ? (
                     <View
                         style={[
@@ -1852,6 +1907,7 @@ function SessionItemFromRowModel(props: SessionItemProps & { rowModel: SessionLi
             hasUnreadMessages={rowModel.hasUnreadMessages}
             draft={rowModel.draft}
             reminder={rowModel.reminder}
+            appearanceColor={rowModel.appearanceColor}
             agentActivityLabel={rowModel.agentActivityLabel}
             isSessionIdentityLoading={rowModel.isIdentityLoading}
             activityTimeLabel={rowModel.activity.label}

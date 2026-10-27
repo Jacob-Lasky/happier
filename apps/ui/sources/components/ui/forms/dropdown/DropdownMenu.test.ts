@@ -388,6 +388,58 @@ describe('DropdownMenu', () => {
         expect(onSelect).toHaveBeenCalledWith('move-to-folder:root');
     });
 
+    it('reveals the swatch highlight only once the person hovers or uses the keyboard', async () => {
+        const { DropdownMenu } = await import('./DropdownMenu');
+        const screen = await renderScreen(React.createElement(DropdownMenu, {
+            open: true,
+            onOpenChange: vi.fn(),
+            items: [{ id: 'blue', title: 'Blue', swatch: { color: '#0000FF' } }, { id: 'red', title: 'Red', swatch: { color: '#FF0000' } }],
+            onSelect: vi.fn(),
+            trigger: React.createElement('View'),
+        }));
+        const results = () => screen.findByType('SelectableMenuResults' as any);
+        expect(results()?.props?.swatchHighlightVisible).toBe(false);
+        act(() => {
+            results()?.props?.onSelectionChange?.(1);
+        });
+        expect(results()?.props?.swatchHighlightVisible).toBe(true);
+    });
+
+    it('keeps the menus open for an item that finishes its own work, and announces a submenu opening', async () => {
+        vi.stubGlobal('requestAnimationFrame', () => 1);
+        const { DropdownMenu } = await import('./DropdownMenu');
+        const onOpenChange = vi.fn();
+        const onSelect = vi.fn();
+        const onSubmenuOpen = vi.fn();
+        const screen = await renderScreen(React.createElement(DropdownMenu, {
+            open: true,
+            onOpenChange,
+            items: [{
+                id: 'color',
+                title: 'Set color',
+                submenu: {
+                    onOpen: onSubmenuOpen,
+                    items: [{ id: 'color:custom-picker', title: 'Custom color…', keepMenuOpen: true }],
+                },
+            }],
+            onSelect,
+            trigger: React.createElement('View'),
+        }));
+
+        act(() => {
+            screen.findByType('SelectableMenuResults' as any)?.props?.onOpenSubmenu?.('color', { current: 'anchor' });
+        });
+        expect(onSubmenuOpen).toHaveBeenCalledOnce();
+
+        const results = screen.findAllByType('SelectableMenuResults' as any);
+        act(() => {
+            results[1]?.props?.onPressItem?.({ id: 'color:custom-picker' });
+        });
+        expect(onSelect).toHaveBeenCalledWith('color:custom-picker');
+        expect(onOpenChange).not.toHaveBeenCalledWith(false);
+        expect(screen.findAllByType('SelectableMenuResults' as any)).toHaveLength(2);
+    });
+
     it('waits for a submenu anchor before opening the submenu popover', async () => {
         const rafCallbacks: FrameRequestCallback[] = [];
         vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {

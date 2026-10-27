@@ -725,6 +725,34 @@ launchd.plist(5) documents `SuccessfulExit` as implying `RunAtLoad`, so keeping 
 login start the mode exists to remove — at the deliberate cost of no crash relaunch while
 on-demand.
 
+In current development source (not yet released), the same shared planner gives current-user
+tasks (daemon, relay host and stack self-host) a native action instead of `powershell.exe`: Task
+Scheduler starts `services/<label>/launcher-<build>-<sha256 prefix>/happier-service-launcher.exe
+--wrapper "<services/<label>.ps1>" --diagnostic-log "<services/<label>.launcher.log>"`. It is a
+GUI-subsystem program, so no console window is created for the task; it starts the unchanged
+wrapper with Windows PowerShell 5.1 (resolved from the Windows directory, not `PATH`) under
+`CREATE_NO_WINDOW`, inheriting only NUL standard handles. The wrapper still owns environment,
+working directory, program and log redirection. The launcher waits for the wrapper and exits with
+its exit code, so Task Scheduler's retry and `IgnoreNew` policy are unchanged. The wrapper runs in
+a private job with kill-on-close: if the launcher is terminated (`Stop-ScheduledTask`, `/End`)
+the whole task tree ends, but after an observed wrapper exit (including a non-zero exit) the job is
+disarmed first, so processes a daemon deliberately leaves running survive a normal exit or
+self-restart. The diagnostic log records launcher version, stage, wrapper PID and creation time,
+Win32 error and wrapper exit — never environment values.
+
+Installs copy the packaged launcher (located as described in
+[Binary-safe runtime](binary-runtime.md)) into the content-named task directory after PE
+validation (x64, PE32+, GUI subsystem, provenance marker) and before any stop or registration. A
+running launcher is never replaced in place, and a different build gets a new directory. Relay host
+and stack self-host upgrades run the same asset preflight before they stop the current service.
+Supported stop accepts only the expected native action for that task, or the exact legacy
+PowerShell action, and refuses any other registered action. A task still registered with the legacy
+action keeps working for start, stop and restart, and service status reports it as a launcher
+upgrade (`windowsLauncherUpgradeNeeded`), which doctor and background-service repair treat as needing
+a reinstall. Only `install` rewrites the action and verifies it afterwards; start/restart drift
+refresh rewrites the wrapper but never the task action. SYSTEM tasks and the self-host auto-update task
+still use the PowerShell action.
+
 ### Desktop control of the background service
 
 Desktop settings carries **one** login-start switch (R16 b). **Stay reachable in the background** is the
@@ -1600,16 +1628,37 @@ unreadable custody and unsuccessful termination retain evidence and produce
 diagnostics. The tracked-runner guard
 also covers accepted runners whose durable session marker is not written yet.
 
-In development source, acquisition-triggered OpenCode pool cleanup and auth-switch
-release read current Session claims under the server's existing lock. Live records
-with unverified ownership or process identity, unavailable claim or turn evidence,
-and unsuccessful termination retain custody. A proved-dead PID or exact process
-identity mismatch permits discarding its stale record.
-Acquisition refuses to overwrite a live server's record when it cannot verify or
-terminate that server, and reports an error for operator verification before retry.
-Bounded direct-session, catalog, and native-fork operations hold that same lock through client disposal,
-so cleanup cannot retire their managed server during an outstanding read. This does
-not add periodic pool reclamation or certify unmarked execution-run lifetimes.
+Development source registers every shared OpenCode runtime client at the canonical
+client factory, including Session, execution-run and temporary inspection clients.
+Acquisition and client registration share the existing server lock. Disposal aborts
+and settles outstanding HTTP/SSE work before releasing its client record. Client
+records carry the caller PID and native process-birth identity; proved-dead or
+reused PIDs lose their records, while unknown identity retains custody.
+The runtime shares one pending acquisition and makes reset join or cancel it,
+preventing concurrent startup/catalog requests or early execution-run Stop from
+losing a client. Intentional restart after reset remains supported. Standalone
+native attachment retains the same client custody for its independent controller
+lifetime; it releases only after the existing terminal owner proves native exit
+or process-tree termination. Unknown cleanup retains custody and warns. Optional
+hosted TUI continues to follow its existing destroy-on-runner-absence policy.
+
+Last-client release and the existing serialized daemon heartbeat invoke the same
+pool reclamation owner in `sharedManagedServer.ts`. It reads client and Session
+claims under that lock and uses the existing process-identity verification before
+termination. Auth-switch release, daemon shutdown and live-server replacement also
+honor client custody. Unavailable claim, turn or identity evidence and unsuccessful
+termination retain evidence and produce warnings. Open idle Sessions remain users;
+this is resource cleanup, not an idle-Session timeout. Periodic retry requires a
+running daemon; standalone clients still release their servers normally.
+
+New automatic state lives in `opencode/managed-servers/clients-tracked/`. Released
+CLI 0.2.17 (`a2c45c86804b24e60ac0b76146a3ef36dfcaa15b`) scans only flat JSON
+files in the parent directory and cannot account for runtime clients. The separate
+subdirectory prevents that released scanner from reclaiming new servers. Explicit
+legacy URL/fingerprint lookup remains supported; legacy automatic reclamation is
+deferred because old clients lack complete custody. No migration, negotiation or
+new timer is introduced. External URLs without matching managed state confer no
+termination authority.
 
 ```mermaid
 graph TB

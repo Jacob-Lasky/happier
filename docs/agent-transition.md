@@ -43,6 +43,12 @@ the Agent, and not forking, which creates a new Session.
 | Arming, arm scope, and the transition's correlation id | `apps/ui/sources/components/sessions/agentPicker/useInSessionAgentPickerControls.tsx` |
 | Which destination one composer send reaches | `apps/ui/sources/sync/domains/session/input/resolveSessionComposerSendDestination.ts` |
 
+In development source, an armed continuation is a submit intent even when the
+composer is blank. `resolveSessionComposerSend` supplies the localized
+`common.continue` prompt only when there is no authored text, attachment or
+included review comment. The original draft remains the compare-clear snapshot;
+the existing transition submission retains the resolved input for retries.
+
 Machine RPCs (`packages/protocol/src/rpc.ts`, registered in
 `apps/cli/src/api/machine/rpcHandlers.ts`):
 

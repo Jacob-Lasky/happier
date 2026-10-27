@@ -5,7 +5,7 @@ import {
     claudeRemoteDispatch,
     type ClaudeRemoteRunnerKind,
 } from "./remote/claudeRemoteDispatch";
-import { ClaudeResumeSessionUnavailableError } from './remote/sessionStartPlan';
+import { ClaudeResumeSessionUnavailableError } from './utils/claudeCheckSession';
 import {
     prepareClaudeUnifiedStartupLifecycle,
     type ClaudeUnifiedStartupLifecycleIntent,
@@ -359,14 +359,16 @@ export function resolveClaudeRemoteLaunchErrorDisposition(params: Readonly<{
     if (params.exitReason !== null) return 'ignore';
     if (params.runtimeTerminationStarted) return 'terminate';
 
+    if (params.error instanceof ClaudeResumeSessionUnavailableError) {
+        return params.error.providerSessionId === params.currentSessionId
+            ? 'preserve-resume-and-exit'
+            : 'surface';
+    }
     const resumeSessionId = params.sessionIdAtLaunchStart?.trim();
     const isSameResumeSession = Boolean(
         resumeSessionId
         && params.currentSessionId === params.sessionIdAtLaunchStart,
     );
-    if (isSameResumeSession && params.error instanceof ClaudeResumeSessionUnavailableError) {
-        return 'preserve-resume-and-exit';
-    }
     if (isSameResumeSession && (params.userAbort === true || params.exitCode === 1)) {
         return 'preserve-resume-and-wait';
     }
@@ -1474,10 +1476,13 @@ export async function claudeRemoteLauncher(
                     // SDK resume does not replay historical Agent launches and acknowledgements.
                     // Runtime selection is now known; observe aliases before returning its first
                     // input to the dispatcher, which can then construct the SDK query and hooks.
+                    // Seed only a resumable id: a provisional, never-materialized id names no
+                    // conversation, and demanding its transcript would fail the fresh start.
                     session.adoptExplicitResumeSessionIdFromArgs();
+                    const resumeIdentity = session.getResumableSessionIdentity();
                     await seedClaudeTranscriptHistory(
-                        session.sessionId,
-                        session.transcriptPath ?? null,
+                        resumeIdentity?.sessionId ?? null,
+                        resumeIdentity?.transcriptPath ?? null,
                         activeRuntimeModeKind === 'agentSdk' && workflowActivitySource !== null,
                     );
                     return pinnedBatch;
@@ -1614,10 +1619,16 @@ export async function claudeRemoteLauncher(
 
                 const remoteDispatch = await inputConsumer.runProviderInputDispatch({
                     abortSignal: controller.signal,
-                    dispatch: async () => claudeRemoteDispatch({
-                    sessionId: session.sessionId,
+                    dispatch: async () => {
+                        const resumeIdentity = session.getResumableSessionIdentity();
+                        return claudeRemoteDispatch({
+                    // Only a resumable id may back the remote start plan: a hook-observed
+                    // id whose transcript never materialized is provisional and resolves
+                    // to null here, so the first remote message starts a fresh Claude
+                    // session instead of failing an unrequested resume.
+                    sessionId: resumeIdentity?.sessionId ?? null,
                     happySessionId: session.client.sessionId,
-                    transcriptPath: session.transcriptPath,
+                    transcriptPath: resumeIdentity?.transcriptPath ?? null,
                     path: session.path,
                     systemPromptText: session.defaultSystemPromptText,
                     hookSettingsPath: session.hookSettingsPath,
@@ -2173,7 +2184,8 @@ export async function claudeRemoteLauncher(
                             inFlightSteerCapabilityPublisher.dispose();
                         }
                     },
-                    }),
+                    });
+                    },
                 });
                 if (remoteDispatch.status === 'cancelled') {
                     continue;

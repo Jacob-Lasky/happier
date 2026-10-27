@@ -42,6 +42,8 @@ Selecting another Agent **arms** it. There is no separate confirm step:
 3. The composer's send control changes to **Continue with `{Agent}`**.
 4. Type your message and send. That send stops the current Agent and starts the chosen one.
 
+In development builds, you can also press **Continue with `{Agent}`** with an empty composer. Happier sends a short "Continue" prompt in your interface language. If you have typed a message or added attachments or review comments, that content is sent instead.
+
 To cancel, reselect the Agent that is currently running the session. Leaving the session is not required, and nothing has been sent until you press send.
 
 An armed choice is scoped to this session and to the Agent that was running it when you armed. If the session's Agent changes underneath you, or the feature is turned off on your server, the arm is discarded rather than silently surviving.
