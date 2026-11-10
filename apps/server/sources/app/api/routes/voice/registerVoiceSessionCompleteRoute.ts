@@ -53,87 +53,82 @@ export function registerVoiceSessionCompleteRoute(app: Fastify): void {
         const userId = request.userId;
         const { leaseId, providerConversationId } = request.body as { leaseId: string; providerConversationId: string };
 
-        const serverFeatures = resolveServerFeaturesForGating(process.env);
-        if (serverFeatures.features.voice.happierVoice.enabled !== true) {
-            return reply.code(404).send({ ok: false, reason: "not_found" as const });
-        }
-
-        const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY?.trim() ?? "";
-        const elevenLabsApiBaseUrl = resolveElevenLabsApiBaseUrl(process.env);
-        if (!elevenLabsApiKey) {
-            return reply.code(503).send({ ok: false, reason: "upstream_error" as const });
-        }
-
         const lease = await db.voiceSessionLease.findFirst({
             where: { id: leaseId, accountId: userId },
-            select: { id: true, accountId: true, elevenLabsAgentId: true, createdAt: true, expiresAt: true },
+            select: { id: true, accountId: true, providerId: true, providerAgentId: true, createdAt: true, expiresAt: true },
         });
         if (!lease) {
             // Fail closed without leaking whether the lease exists for other users.
             return reply.code(404).send({ ok: false, reason: "not_found" as const });
         }
 
-        let durationSeconds = 0;
-        let startedAt: Date | null = null;
-        let endedAt: Date | null = null;
-
+        const providerId = lease.providerId;
+        const serverFeatures = resolveServerFeaturesForGating(process.env);
+        const enabled = providerId === "deepgram"
+            ? serverFeatures.features.voice.deepgram.enabled
+            : serverFeatures.features.voice.happierVoice.enabled;
+        if (!enabled) return reply.code(404).send({ ok: false, reason: "not_found" as const });
+        const conversationProviderId = providerId === "deepgram" ? "deepgram" : "elevenlabs_agents";
+        let durationSeconds: number;
+        let startedAt: Date;
+        let endedAt: Date;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10_000);
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10_000);
-            let res: Response;
-            try {
-                res = await fetch(
-                    `${elevenLabsApiBaseUrl}/v1/convai/conversations/${encodeURIComponent(providerConversationId)}`,
-                    {
-                        method: "GET",
-                        headers: {
-                            "xi-api-key": elevenLabsApiKey,
-                            Accept: "application/json",
-                        },
-                        signal: controller.signal,
-                    },
-                );
-            } finally {
-                clearTimeout(timeoutId);
-            }
-            if (!res.ok) {
-                return reply.code(503).send({ ok: false, reason: "upstream_error" as const });
-            }
-            const json = (await res.json().catch(() => null)) as any;
-            const dur = Number(json?.metadata?.call_duration_secs);
-            if (!Number.isFinite(dur) || dur < 0) {
-                return reply.code(503).send({ ok: false, reason: "upstream_error" as const });
-            }
-            durationSeconds = Math.floor(dur);
-
-            const conversationAgentId = extractConversationAgentId(json);
-            if (!conversationAgentId || conversationAgentId !== lease.elevenLabsAgentId) {
-                // Do not disclose cross-lease/cross-user existence details.
-                return reply.code(404).send({ ok: false, reason: "not_found" as const });
-            }
-
-            const startUnix = extractConversationStartUnixSecs(json);
-            if (startUnix !== null) {
-                const candidateStartedAt = new Date(startUnix * 1000);
-                const lowerBound = lease.createdAt.getTime() - 5 * 60 * 1000;
-                const upperBound = lease.expiresAt.getTime() + 5 * 60 * 1000;
-                if (candidateStartedAt.getTime() < lowerBound || candidateStartedAt.getTime() > upperBound) {
+            let duration: number;
+            if (providerId === "deepgram") {
+                const headers = { Authorization: `Token ${process.env.DEEPGRAM_API_KEY?.trim() ?? ""}` };
+                let projectId = process.env.DEEPGRAM_PROJECT_ID?.trim();
+                if (!projectId) {
+                    const projectsResponse = await fetch("https://api.deepgram.com/v1/projects", { headers, signal: controller.signal });
+                    if (!projectsResponse.ok) throw new Error("deepgram_projects_unavailable");
+                    const projects = z.object({ projects: z.array(z.object({ project_id: z.string() })) }).parse(await projectsResponse.json()).projects;
+                    // A member key can see multiple projects; never guess which account should be charged.
+                    if (projects.length !== 1) throw new Error("deepgram_project_configuration_required");
+                    projectId = projects[0].project_id;
+                }
+                const response = await fetch(`https://api.deepgram.com/v1/projects/${encodeURIComponent(projectId)}/requests/${encodeURIComponent(providerConversationId)}`, { headers, signal: controller.signal });
+                if (!response.ok) throw new Error("deepgram_usage_unavailable");
+                const usage = z.object({
+                    request_id: z.string(), path: z.string(), created: z.string().datetime({ offset: true }),
+                    response: z.object({ completed: z.string().datetime({ offset: true }), details: z.object({ tags: z.array(z.string()) }), sts_details: z.object({ duration: z.number().finite().nonnegative() }) }),
+                }).parse(await response.json());
+                if (usage.request_id !== providerConversationId || usage.path.split("?")[0] !== "/v1/agent/converse" || !usage.response.details.tags.includes(lease.id)) {
                     return reply.code(404).send({ ok: false, reason: "not_found" as const });
                 }
-                startedAt = candidateStartedAt;
-                endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
+                duration = usage.response.sts_details.duration;
+                startedAt = new Date(usage.created);
             } else {
+                const response = await fetch(`${resolveElevenLabsApiBaseUrl(process.env)}/v1/convai/conversations/${encodeURIComponent(providerConversationId)}`, {
+                    method: "GET", headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY?.trim() ?? "", Accept: "application/json" }, signal: controller.signal,
+                });
+                if (!response.ok) throw new Error("elevenlabs_usage_unavailable");
+                const json: unknown = await response.json();
+                const usage = z.object({ metadata: z.object({ call_duration_secs: z.coerce.number().finite().nonnegative() }) }).parse(json);
+                const startUnix = extractConversationStartUnixSecs(json);
+                if (extractConversationAgentId(json) !== lease.providerAgentId || startUnix === null) {
+                    return reply.code(404).send({ ok: false, reason: "not_found" as const });
+                }
+                duration = usage.metadata.call_duration_secs;
+                startedAt = new Date(startUnix * 1000);
+            }
+            if (startedAt.getTime() < lease.createdAt.getTime() - 5 * 60 * 1000 || startedAt.getTime() > lease.expiresAt.getTime() + 5 * 60 * 1000) {
                 return reply.code(404).send({ ok: false, reason: "not_found" as const });
             }
-        } catch (e) {
+            durationSeconds = Math.floor(duration);
+            endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
+        } catch {
+            log({ module: "voice" }, `Failed to verify ${providerId} voice usage`);
             return reply.code(503).send({ ok: false, reason: "upstream_error" as const });
+        } finally {
+            clearTimeout(timeoutId);
         }
 
         try {
             const existingForConversation = await db.voiceConversation.findUnique({
                 where: {
                     providerId_providerConversationId: {
-                        providerId: "elevenlabs_agents",
+                        providerId: conversationProviderId,
                         providerConversationId,
                     },
                 },
@@ -158,14 +153,14 @@ export function registerVoiceSessionCompleteRoute(app: Fastify): void {
             await db.voiceConversation.upsert({
                 where: {
                     providerId_providerConversationId: {
-                        providerId: "elevenlabs_agents",
+                        providerId: conversationProviderId,
                         providerConversationId,
                     },
                 },
                 create: {
                     accountId: lease.accountId,
                     leaseId: lease.id,
-                    providerId: "elevenlabs_agents",
+                    providerId: conversationProviderId,
                     providerConversationId,
                     startedAt,
                     endedAt,

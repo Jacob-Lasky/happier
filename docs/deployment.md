@@ -61,8 +61,9 @@ Run `yarn --cwd apps/server validate:redis-adapter` from a development checkout 
     - `AUTH_GITHUB_APP_ID`
     - `AUTH_GITHUB_APP_PRIVATE_KEY` (PEM)
     - `AUTH_GITHUB_APP_INSTALLATION_ID_BY_ORG` (e.g. `acme=123,other=456`)
-- Voice (server-minted ElevenLabs conversation tokens via `POST /v1/voice/token`):
-  - Required: `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID_PROD`
+- Voice (server-minted credentials via `POST /v1/voice/token`):
+  - ElevenLabs: `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID_PROD`
+  - Deepgram (experimental web/Linux): `DEEPGRAM_API_KEY`; `DEEPGRAM_PROJECT_ID` when the key sees multiple projects. The same mint and completion routes own leases and quotas. Completion verifies request metadata and the lease tag before storing duration.
   - Required when `HAPPIER_FEATURE_VOICE__REQUIRE_SUBSCRIPTION=true`: `REVENUECAT_SECRET_KEY`
   - Optional controls:
     - `HAPPIER_FEATURE_VOICE__ENABLED` (`true`/`false`, default `true`)

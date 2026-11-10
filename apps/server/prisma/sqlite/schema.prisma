@@ -157,8 +157,9 @@ model VoiceSessionLease {
     /// "subscription" | "free" (string for forward/backward compatibility).
     grantedBy        String
 
-    /// The ElevenLabs agent id used for minting.
-    elevenLabsAgentId String
+    /// Provider agent identifier; empty for inline Deepgram Settings. Physical name preserves existing databases.
+    providerAgentId  String @map("elevenLabsAgentId")
+    providerId       String @default("elevenlabs")
 
     expiresAt        DateTime
     createdAt        DateTime @default(now())

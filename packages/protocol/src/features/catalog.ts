@@ -45,6 +45,12 @@ const FEATURE_CATALOG_DEFINITION = {
     dependencies: ['voice'],
     representation: 'server',
   },
+  'voice.deepgram': {
+    description: 'Server-managed Deepgram realtime voice availability.',
+    defaultFailMode: 'fail_closed',
+    dependencies: ['voice'],
+    representation: 'server',
+  },
   'voice.agent': {
     description: 'Daemon-backed voice agent surfaces (requires execution runs substrate).',
     defaultFailMode: 'fail_closed',

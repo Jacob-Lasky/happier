@@ -16,7 +16,7 @@ export function resolveVoiceFeature(env: NodeJS.ProcessEnv): FeaturesPayloadDelt
 
     return {
         features: {
-            voice: { enabled, happierVoice: { enabled: happierVoiceEnabled } },
+            voice: { enabled, happierVoice: { enabled: happierVoiceEnabled }, deepgram: { enabled: enabled && Boolean(env.DEEPGRAM_API_KEY?.trim()) && revenueCatConfigured } },
         },
         capabilities: {
             voice: {

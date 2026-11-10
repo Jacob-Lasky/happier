@@ -35,7 +35,8 @@ describe("voiceRoutes (session complete)", () => {
         leaseFindFirst.mockResolvedValue({
             id: "lease_1",
             accountId: "u1",
-            elevenLabsAgentId: "agent_dev",
+            providerAgentId: "agent_dev",
+            providerId: "elevenlabs",
             createdAt: new Date("2026-02-01T00:00:00.000Z"),
             expiresAt: new Date("2026-02-01T01:00:00.000Z"),
         });
@@ -47,6 +48,26 @@ describe("voiceRoutes (session complete)", () => {
     afterEach(() => {
         resetVoiceEnv();
         globalThis.fetch = originalFetch;
+    });
+
+    it.each([true, false])("verifies Deepgram usage and lease tag before releasing the slot (tag matches: %s)", async (matches) => {
+        resetVoiceEnv({ DEEPGRAM_API_KEY: "dg_key", DEEPGRAM_PROJECT_ID: "project_1", VOICE_REQUIRE_SUBSCRIPTION: "0" });
+        leaseFindFirst.mockResolvedValue({ id: "lease_1", accountId: "u1", providerId: "deepgram", providerAgentId: "", createdAt: new Date("2026-02-01T00:00:00Z"), expiresAt: new Date("2026-02-01T01:00:00Z") });
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+            request_id: "request_1", path: "/v1/agent/converse?", created: "2026-02-01T00:00:32Z",
+            response: { completed: "2026-02-01T00:01:14Z", details: { tags: [matches ? "lease_1" : "another_lease"] }, sts_details: { duration: 42.5 } },
+        }), { status: 200 }));
+        const { voiceRoutes } = await import("./voiceRoutes");
+        const route = createRouteTestBuilder({ method: "POST", path: "/v1/voice/session/complete", registerRoutes(app) { voiceRoutes(app as any); } });
+        const { response, reply } = await route.invoke({ userId: "u1", body: { leaseId: "lease_1", providerConversationId: "request_1" } });
+        if (matches) {
+            expect(response).toEqual({ ok: true, durationSeconds: 42 });
+            expect(conversationUpsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ leaseId: "lease_1", providerId: "deepgram", durationSeconds: 42 }) }));
+        } else {
+            expect(reply.code).toHaveBeenCalledWith(404);
+            expect(conversationUpsert).not.toHaveBeenCalled();
+        }
+        expect(globalThis.fetch).toHaveBeenCalledWith("https://api.deepgram.com/v1/projects/project_1/requests/request_1", expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Token dg_key" }) }));
     });
 
     it("fetches conversation details and stores duration for a valid lease", async () => {

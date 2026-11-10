@@ -9,6 +9,7 @@ const DEFAULT_GATE_ENABLED: FeatureGate = { enabled: true };
 const VoiceGateSchema = lazySchema(() => z.object({
   enabled: z.boolean(),
   happierVoice: FeatureGateSchema.optional().default(DEFAULT_GATE_DISABLED),
+  deepgram: FeatureGateSchema.optional().default(DEFAULT_GATE_DISABLED),
 }));
 
 export const FeatureGatesSchema = lazySchema(() => z.object({
@@ -165,7 +166,7 @@ export const FeatureGatesSchema = lazySchema(() => z.object({
     })
     .optional()
     .default({ embeddedPty: DEFAULT_GATE_DISABLED }),
-  voice: VoiceGateSchema.optional().default({ enabled: false, happierVoice: DEFAULT_GATE_DISABLED }),
+  voice: VoiceGateSchema.optional().default({ enabled: false, happierVoice: DEFAULT_GATE_DISABLED, deepgram: DEFAULT_GATE_DISABLED }),
   social: z
     .object({
       friends: FeatureGateSchema.optional().default(DEFAULT_GATE_DISABLED),

@@ -62,6 +62,37 @@ describe("voiceRoutes (secure)", () => {
         globalThis.fetch = originalFetch;
     });
 
+    it("mints a Deepgram grant through the existing lease route without ElevenLabs credentials", async () => {
+        process.env.DEEPGRAM_API_KEY = "deepgram_test_key";
+        process.env.HAPPIER_FEATURE_VOICE__REQUIRE_SUBSCRIPTION = "false";
+        delete process.env.ELEVENLABS_API_KEY;
+        delete process.env.ELEVENLABS_AGENT_ID_PROD;
+        try {
+            vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({
+                access_token: "deepgram_grant", expires_in: 600,
+            }), { status: 200 }));
+            const { voiceRoutes } = await import("./voiceRoutes");
+            const route = createRouteTestBuilder({
+                method: "POST", path: "/v1/voice/token",
+                registerRoutes(app) { voiceRoutes(app as unknown as Parameters<typeof voiceRoutes>[0]); },
+            });
+            const { reply } = await route.invoke({ userId: "u1", body: { providerId: "deepgram", sessionId: "s1" } });
+            expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
+                allowed: true, token: "deepgram_grant", leaseId: "lease_1",
+            }));
+            expect(globalThis.fetch).toHaveBeenCalledWith("https://api.deepgram.com/v1/auth/grant", expect.objectContaining({
+                method: "POST", body: JSON.stringify({ ttl_seconds: 600 }),
+                headers: expect.objectContaining({ Authorization: "Token deepgram_test_key" }),
+            }));
+            expect(leaseCreate).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ providerId: "deepgram", accountId: "u1" }),
+            }));
+        } finally {
+            delete process.env.DEEPGRAM_API_KEY;
+            delete process.env.HAPPIER_FEATURE_VOICE__REQUIRE_SUBSCRIPTION;
+        }
+    });
+
     it("returns 403 when voice is disabled", async () => {
         resetVoiceEnv({
             NODE_ENV: "production",

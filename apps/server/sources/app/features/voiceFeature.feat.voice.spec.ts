@@ -3,6 +3,29 @@ import { describe, expect, it } from 'vitest';
 import { resolveVoiceFeature } from './voiceFeature';
 
 describe('features/voiceFeature', () => {
+  it('enables Deepgram independently of ElevenLabs when managed voice is configured', () => {
+    const res = resolveVoiceFeature({
+      HAPPIER_FEATURE_VOICE__ENABLED: 'true',
+      HAPPIER_FEATURE_VOICE__REQUIRE_SUBSCRIPTION: 'false',
+      DEEPGRAM_API_KEY: 'test-deepgram-key',
+    });
+
+    expect(res.features?.voice).toMatchObject({
+      enabled: true,
+      happierVoice: { enabled: false },
+      deepgram: { enabled: true },
+    });
+  });
+
+  it('keeps Deepgram disabled when its key or required subscription service is missing', () => {
+    for (const env of [
+      { HAPPIER_FEATURE_VOICE__ENABLED: 'true', HAPPIER_FEATURE_VOICE__REQUIRE_SUBSCRIPTION: 'false' },
+      { HAPPIER_FEATURE_VOICE__ENABLED: 'true', HAPPIER_FEATURE_VOICE__REQUIRE_SUBSCRIPTION: 'true', DEEPGRAM_API_KEY: 'test-key' },
+    ]) {
+      expect(resolveVoiceFeature(env).features?.voice).toMatchObject({ deepgram: { enabled: false } });
+    }
+  });
+
   it('keeps voice enabled while marking Happier Voice unavailable when ElevenLabs is not configured', () => {
     const res = resolveVoiceFeature({
       NODE_ENV: 'production',

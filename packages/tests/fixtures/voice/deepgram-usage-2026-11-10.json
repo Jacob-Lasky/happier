@@ -1,0 +1,116 @@
+{
+  "time": "2026-11-10T22:22:51.689Z",
+  "status": 200,
+  "settingsFrame": {
+    "ms": 284,
+    "direction": "client",
+    "message": {
+      "type": "Settings",
+      "tags": [
+        "w302-lease-proof"
+      ],
+      "audio": {
+        "input": {
+          "encoding": "linear16",
+          "sample_rate": 16000
+        },
+        "output": {
+          "encoding": "linear16",
+          "sample_rate": 24000,
+          "container": "none"
+        }
+      },
+      "agent": {
+        "language": "en",
+        "listen": {
+          "provider": {
+            "type": "deepgram",
+            "version": "v2",
+            "model": "flux-general-en"
+          }
+        },
+        "think": {
+          "provider": {
+            "type": "open_ai",
+            "model": "gpt-4o-mini"
+          },
+          "prompt": "You are a concise wire testing assistant. For every user request asking for a lookup call lookup_status exactly once with their label, then speak its returned status. When asked to cancel, do not call tools and just say hello.",
+          "functions": [
+            {
+              "name": "lookup_status",
+              "description": "Look up a test status by label.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label"
+                ]
+              }
+            }
+          ]
+        },
+        "speak": {
+          "provider": {
+            "type": "deepgram",
+            "model": "aura-2-thalia-en"
+          }
+        }
+      }
+    }
+  },
+  "usage": {
+    "request_id": "01a1c78d-ea07-7f93-aa21-6eea080583f6",
+    "created": "2026-11-10T22:22:08.903628Z",
+    "path": "/v1/agent/converse?",
+    "response": {
+      "details": {
+        "models": [],
+        "method": "streaming",
+        "tags": [
+          "w302-lease-proof"
+        ],
+        "features": [],
+        "config": {}
+      },
+      "token_details": [],
+      "sts_details": {
+        "llms": [
+          {
+            "provider": "open_ai",
+            "model": "gpt-4o-mini",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_write_input_tokens": 0
+          }
+        ],
+        "custom_llm": false,
+        "tier": "standard",
+        "input_audio": {
+          "encoding": "linear16",
+          "sample_rate": 16000
+        },
+        "output_audio": {
+          "bitrate": null,
+          "container": "none",
+          "encoding": "linear16",
+          "sample_rate": 24000,
+          "stream": true
+        },
+        "metadata": {
+          "llm_input_tokens": 453,
+          "llm_output_tokens": 42,
+          "tts_characters": 79
+        },
+        "duration": 13.205
+      },
+      "code": 101,
+      "completed": "2026-11-10T22:22:22.137408Z",
+      "deployment": "hosted:us"
+    }
+  }
+}

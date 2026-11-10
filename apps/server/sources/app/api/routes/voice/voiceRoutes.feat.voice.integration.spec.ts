@@ -59,6 +59,34 @@ describe("voiceRoutes (integration, sqlite)", () => {
         await db.account.deleteMany().catch(() => {});
     });
 
+    it("releases a completed Deepgram lease so another call can start", async () => {
+        const user = await db.account.create({ data: { publicKey: "pk-voice-deepgram-u1" }, select: { id: true } });
+        harness.resetEnv({ DEEPGRAM_API_KEY: "dg-key", DEEPGRAM_PROJECT_ID: "project_1" });
+        let leaseId = "";
+        vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request) => {
+            if (String(url) === "https://api.deepgram.com/v1/auth/grant") return new Response(JSON.stringify({ access_token: "grant", expires_in: 60 }));
+            if (String(url).endsWith("/requests/dg_request")) return new Response(JSON.stringify({
+                request_id: "dg_request", path: "/v1/agent/converse?", created: new Date().toISOString(),
+                response: { completed: new Date().toISOString(), details: { tags: [leaseId] }, sts_details: { duration: 4.5 } },
+            }));
+            throw new Error("unexpected upstream route");
+        }));
+        const app = createTestApp();
+        voiceRoutes(app);
+        await app.ready();
+        const headers = { "content-type": "application/json", "x-test-user-id": user.id };
+        const mint = () => app.inject({ method: "POST", url: "/v1/voice/token", headers, payload: { providerId: "deepgram" } });
+        const first = await mint();
+        expect(first.statusCode).toBe(200);
+        leaseId = first.json().leaseId;
+        expect((await mint()).statusCode).toBe(429);
+        const completed = await app.inject({ method: "POST", url: "/v1/voice/session/complete", headers, payload: { leaseId, providerConversationId: "dg_request" } });
+        expect(completed.statusCode).toBe(200);
+        expect(completed.json()).toEqual({ ok: true, durationSeconds: 4 });
+        expect((await mint()).statusCode).toBe(200);
+        expect(await db.voiceConversation.findUnique({ where: { leaseId }, select: { providerId: true, durationSeconds: true } })).toEqual({ providerId: "deepgram", durationSeconds: 4 });
+    });
+
     it("mints a voice token, persists a lease, and does not persist a VoiceConversation until completion", async () => {
         const user = await db.account.create({ data: { publicKey: "pk-voice-u1" }, select: { id: true } });
 

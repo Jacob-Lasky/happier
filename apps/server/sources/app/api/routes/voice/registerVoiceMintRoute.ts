@@ -38,6 +38,7 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
             body: z
                 .object({
                     sessionId: z.string().optional(),
+                    providerId: z.enum(["elevenlabs", "deepgram"]).default("elevenlabs"),
                 })
                 .passthrough(),
             response: {
@@ -63,7 +64,7 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
         },
     }, async (request, reply) => {
         const userId = request.userId; // CUID from JWT
-        const { sessionId: rawSessionId } = (request.body ?? {}) as { sessionId?: string };
+        const { sessionId: rawSessionId, providerId = "elevenlabs" } = (request.body ?? {}) as { sessionId?: string; providerId?: "elevenlabs" | "deepgram" };
         const sessionId = (() => {
             if (typeof rawSessionId !== "string") return null;
             const trimmed = rawSessionId.trim();
@@ -76,23 +77,23 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
 
         const serverFeatures = resolveServerFeaturesForGating(env);
         const voiceCaps = serverFeatures.capabilities.voice;
-        const happierVoiceEnabled = serverFeatures.features.voice.happierVoice.enabled === true;
+        const happierVoiceEnabled = serverFeatures.features.voice[providerId === "deepgram" ? "deepgram" : "happierVoice"].enabled === true;
         if (!happierVoiceEnabled) {
             if (voiceCaps.disabledByBuildPolicy === true) {
                 return reply.code(403).send({ allowed: false, reason: "voice_disabled" satisfies VoiceDenyReason });
             }
-            if (voiceCaps.requested === true && voiceCaps.configured !== true) {
+            if (voiceCaps.requested === true && (providerId === "deepgram" ? !env.DEEPGRAM_API_KEY?.trim() || (readVoiceFeatureEnv(env).requireSubscription && !env.REVENUECAT_SECRET_KEY?.trim()) : voiceCaps.configured !== true)) {
                 return reply.code(503).send({ allowed: false, reason: "misconfigured" satisfies VoiceDenyReason });
             }
             return reply.code(403).send({ allowed: false, reason: "voice_disabled" satisfies VoiceDenyReason });
         }
 
-        // Check if 11Labs API key is configured
+        // Provider configuration is checked before reserving the shared account lease.
         const elevenLabsApiKey = env.ELEVENLABS_API_KEY?.trim() ?? "";
-        const elevenLabsAgentId = resolveElevenLabsAgentId(env);
+        const elevenLabsAgentId = resolveElevenLabsAgentId(env) ?? "";
         const elevenLabsApiBaseUrl = resolveElevenLabsApiBaseUrl(env);
-        if (!elevenLabsApiKey || !elevenLabsAgentId) {
-            log({ module: "voice" }, "Voice is misconfigured (missing ELEVENLABS_API_KEY or ELEVENLABS_AGENT_ID)");
+        if (providerId === "deepgram" ? !env.DEEPGRAM_API_KEY?.trim() : !elevenLabsApiKey || !elevenLabsAgentId) {
+            log({ module: "voice" }, `Voice provider ${providerId} is misconfigured`);
             return reply.code(503).send({ allowed: false, reason: "misconfigured" satisfies VoiceDenyReason });
         }
 
@@ -249,7 +250,8 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
                         sessionId,
                         periodKey,
                         grantedBy,
-                        elevenLabsAgentId,
+                        providerId,
+                        providerAgentId: providerId === "elevenlabs" ? elevenLabsAgentId : "",
                         expiresAt,
                     },
                     select: { id: true },
@@ -293,49 +295,33 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
             return reply.code(503).send({ allowed: false, reason: "upstream_error" satisfies VoiceDenyReason });
         }
 
-        // Get 11Labs conversation token
-        let response: Response;
+        // Both providers consume the same lease, quota, and upstream timeout budget.
+        let token: string;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10_000);
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10_000);
-            try {
-                response = await fetch(
-                    `${elevenLabsApiBaseUrl}/v1/convai/conversation/token?agent_id=${encodeURIComponent(elevenLabsAgentId)}`,
+            const response = await fetch(
+                    providerId === "deepgram"
+                        ? "https://api.deepgram.com/v1/auth/grant"
+                        : `${elevenLabsApiBaseUrl}/v1/convai/conversation/token?agent_id=${encodeURIComponent(elevenLabsAgentId)}`,
                     {
-                        method: "GET",
-                        headers: {
-                            "xi-api-key": elevenLabsApiKey,
-                            Accept: "application/json",
-                        },
+                        method: providerId === "deepgram" ? "POST" : "GET",
+                        headers: providerId === "deepgram"
+                            ? { Authorization: `Token ${env.DEEPGRAM_API_KEY!.trim()}`, "Content-Type": "application/json" }
+                            : { "xi-api-key": elevenLabsApiKey, Accept: "application/json" },
+                        ...(providerId === "deepgram" ? { body: JSON.stringify({ ttl_seconds: Math.min(maxSessionSeconds, 3600) }) } : {}),
                         signal: controller.signal,
                     }
                 );
-            } finally {
-                clearTimeout(timeoutId);
-            }
-        } catch (e) {
-            if (leaseId) {
-                await db.voiceSessionLease.delete({ where: { id: leaseId } }).catch(() => {});
-            }
-            log({ module: "voice" }, `Failed to get 11Labs token for user ${userId}`, e);
+            if (!response.ok) throw new Error("voice_grant_rejected");
+            const data: unknown = await response.json();
+            token = (providerId === "deepgram" ? z.object({ access_token: z.string().min(1) }).parse(data).access_token : z.object({ token: z.string().min(1) }).parse(data).token);
+        } catch {
+            if (leaseId) await db.voiceSessionLease.delete({ where: { id: leaseId } }).catch(() => {});
+            log({ module: "voice" }, `Failed to mint ${providerId} voice token`);
             return reply.code(503).send({ allowed: false, reason: "upstream_error" satisfies VoiceDenyReason });
-        }
-
-        if (!response.ok) {
-            if (leaseId) {
-                await db.voiceSessionLease.delete({ where: { id: leaseId } }).catch(() => {});
-            }
-            log({ module: "voice" }, `Failed to get 11Labs token for user ${userId}`);
-            return reply.code(503).send({ allowed: false, reason: "upstream_error" satisfies VoiceDenyReason });
-        }
-
-        const data = (await response.json().catch(() => null)) as any;
-        const token = data && typeof data === "object" ? (data as any).token : null;
-        if (!token || typeof token !== "string") {
-            if (leaseId) {
-                await db.voiceSessionLease.delete({ where: { id: leaseId } }).catch(() => {});
-            }
-            return reply.code(503).send({ allowed: false, reason: "upstream_error" satisfies VoiceDenyReason });
+        } finally {
+            clearTimeout(timeoutId);
         }
 
         log({ module: "voice" }, `Voice token issued for user ${userId}`);
