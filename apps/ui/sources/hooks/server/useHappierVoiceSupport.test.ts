@@ -11,6 +11,21 @@ afterEach(() => {
 });
 
 describe('useHappierVoiceSupport', () => {
+    it('keeps the saved Deepgram provider when voice is disabled only on this client', async () => {
+        vi.resetModules();
+        stubServerFeaturesFetch({ voiceEnabled: true, happierVoiceEnabled: false, deepgramEnabled: true });
+        const { getStorage } = await import('@/sync/domains/state/storage');
+        getStorage().getState().applySettingsLocal({ experiments: true, featureToggles: { voice: false } });
+        const { resetServerFeaturesClientForTests } = await import('@/sync/api/capabilities/serverFeaturesClient');
+        resetServerFeaturesClientForTests();
+        const { useHappierVoiceSupport } = await import('./useHappierVoiceSupport');
+        const { useFeatureDecision } = await import('./useFeatureDecision');
+        const hook = await renderHook(() => ({ value: useHappierVoiceSupport('realtime_deepgram'), decision: useFeatureDecision('voice.deepgram', { scopeKind: 'runtime' }) }), { flushOptions: { cycles: 6, turns: 2 } });
+        expect(hook.getCurrent().decision?.blockedBy).toBe('dependency');
+        expect(hook.getCurrent().value).toBe(null);
+        await hook.unmount();
+    });
+
     it('returns true when voice is enabled', async () => {
         vi.resetModules();
         stubServerFeaturesFetch({ voiceEnabled: true });
@@ -74,7 +89,7 @@ describe('useHappierVoiceSupport', () => {
         await hook.unmount();
     });
 
-    it('fails closed when the request fails', async () => {
+    it('keeps unavailable probe state unknown so it cannot overwrite the saved provider', async () => {
         vi.resetModules();
         stubServerFeaturesFetchFailure();
 
@@ -86,7 +101,7 @@ describe('useHappierVoiceSupport', () => {
             flushOptions: { cycles: 6, turns: 2 },
         });
 
-        expect(hook.getCurrent()).toBe(false);
+        expect(hook.getCurrent()).toBe(null);
         await hook.unmount();
     });
 });

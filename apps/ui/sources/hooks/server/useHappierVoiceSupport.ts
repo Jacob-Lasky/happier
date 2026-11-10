@@ -1,12 +1,11 @@
 import { useFeatureDecision } from './useFeatureDecision';
 
-/**
- * Returns `true` when the server reports Happier Voice is available; otherwise `false`.
- *
- * This fails closed: if the decision cannot be resolved (network error / not fetched yet),
- * treat the feature as disabled so UI does not assume support.
+/** A resolved server denial may clear managed voice; loading and local policy never do.
+ * Callers offering voice controls must require `true` explicitly.
  */
-export function useHappierVoiceSupport(providerId: string = 'realtime_elevenlabs'): boolean {
-    const decision = useFeatureDecision(providerId === 'realtime_deepgram' ? 'voice.deepgram' : 'voice.happierVoice');
-    return decision?.state === 'enabled';
+export function useHappierVoiceSupport(providerId: string = 'realtime_elevenlabs'): boolean | null {
+    const decision = useFeatureDecision(providerId === 'realtime_deepgram' ? 'voice.deepgram' : 'voice.happierVoice', { scopeKind: 'runtime' });
+    if (decision?.state === 'enabled') return true;
+    if (decision?.blockedBy === 'server' && (decision.state === 'disabled' || decision.state === 'unsupported')) return false;
+    return null;
 }

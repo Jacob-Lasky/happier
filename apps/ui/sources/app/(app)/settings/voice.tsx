@@ -34,7 +34,7 @@ export default function VoiceSettingsScreen() {
   return (
     <View style={{ flex: 1 }} ref={popoverBoundaryRef}>
       <ItemList>
-        <VoiceProviderSection voice={voice} setVoice={setVoice} happierVoiceSupported={happierVoiceSupported} />
+        <VoiceProviderSection voice={voice} setVoice={setVoice} happierVoiceSupported={happierVoiceSupported === true} />
 
         <ItemGroup title={t('settingsVoice.languageTitle')} footer={t('settingsVoice.languageDescription')}>
           <DropdownMenu

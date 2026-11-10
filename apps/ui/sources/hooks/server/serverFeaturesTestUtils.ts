@@ -15,6 +15,7 @@ type FixtureOverrides = {
     friendsRequiredIdentityProviderId?: string | null;
     voiceEnabled?: boolean;
     happierVoiceEnabled?: boolean;
+    deepgramEnabled?: boolean;
     voiceConfigured?: boolean;
     automationsEnabled?: boolean;
     connectedServicesEnabled?: boolean;
@@ -156,7 +157,7 @@ export function buildServerFeaturesResponse(overrides: FixtureOverrides = {}): F
             voice: {
                 enabled: voiceEnabled,
                 happierVoice: { enabled: happierVoiceEnabled },
-                deepgram: { enabled: false },
+                deepgram: { enabled: overrides.deepgramEnabled ?? false },
             },
             social: {
                 friends: {
