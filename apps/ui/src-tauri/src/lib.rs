@@ -228,6 +228,47 @@ mod desktop_dialog {
     use tauri_plugin_dialog::DialogExt;
     use tokio::sync::oneshot;
 
+    // WebKitGTK's default is to deny media requests without displaying a prompt.
+    // Keep consent in the native permission owner, shared by every web voice provider.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn request_linux_media_permission(
+        webview: tauri::Webview,
+        kind: tauri::webview::PermissionKind,
+    ) -> tauri::webview::PermissionResponse {
+        use gtk::prelude::*;
+        use tauri::webview::{PermissionKind, PermissionResponse};
+        if kind != PermissionKind::Microphone {
+            return PermissionResponse::Default;
+        }
+        let Ok(parent) = webview.window().gtk_window() else {
+            return PermissionResponse::Deny;
+        };
+        let Ok(url) = webview.url() else {
+            return PermissionResponse::Deny;
+        };
+        let dialog = gtk::MessageDialog::new(
+            Some(&parent),
+            gtk::DialogFlags::MODAL,
+            gtk::MessageType::Question,
+            gtk::ButtonsType::None,
+            "Allow microphone access?",
+        );
+        dialog.set_secondary_text(Some(&format!(
+            "{} wants to use your microphone for voice conversations.",
+            url.origin().ascii_serialization()
+        )));
+        dialog.add_button("Deny", gtk::ResponseType::Cancel);
+        dialog.add_button("Allow", gtk::ResponseType::Accept);
+        dialog.set_default_response(gtk::ResponseType::Cancel);
+        let response = dialog.run();
+        dialog.close();
+        if response == gtk::ResponseType::Accept {
+            PermissionResponse::Allow
+        } else {
+            PermissionResponse::Deny
+        }
+    }
+
     #[tauri::command]
     pub async fn desktop_pick_ssh_identity_file(app: AppHandle) -> Result<Option<String>, String> {
         let (tx, rx) = oneshot::channel::<Option<String>>();

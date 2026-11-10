@@ -376,9 +376,11 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<Webvie
         .cloned()
         .ok_or_else(|| tauri::Error::WindowNotFound)?;
     let policy = resolve_window_chrome_policy(app, MAIN_WINDOW_LABEL);
-    let window = tauri::WebviewWindowBuilder::from_config(app, &config)?
-        .decorations(policy.use_window_decorations)
-        .build()?;
+    let builder = tauri::WebviewWindowBuilder::from_config(app, &config)?
+        .decorations(policy.use_window_decorations);
+    #[cfg(target_os = "linux")]
+    let builder = builder.on_permission_request(crate::desktop_dialog::request_linux_media_permission);
+    let window = builder.build()?;
     configure_main_window(app, &window);
     Ok(window)
 }
