@@ -1,0 +1,2639 @@
+{
+  "time": "2026-11-10T21:25:29.155Z",
+  "reason": "cancel_observed",
+  "input": {
+    "encoding": "linear16",
+    "sample_rate": 16000,
+    "bargeInBytes": 119040
+  },
+  "output": {
+    "encoding": "linear16",
+    "sample_rate": 24000,
+    "audioBytes": 245760
+  },
+  "frames": [
+    {
+      "ms": 319,
+      "direction": "server",
+      "message": {
+        "type": "Welcome",
+        "request_id": "01a1c759-d4e8-7613-aa54-d25ee9d830f0"
+      }
+    },
+    {
+      "ms": 319,
+      "direction": "client",
+      "message": {
+        "type": "Settings",
+        "audio": {
+          "input": {
+            "encoding": "linear16",
+            "sample_rate": 16000
+          },
+          "output": {
+            "encoding": "linear16",
+            "sample_rate": 24000,
+            "container": "none"
+          }
+        },
+        "agent": {
+          "language": "en",
+          "listen": {
+            "provider": {
+              "type": "deepgram",
+              "version": "v2",
+              "model": "flux-general-en"
+            }
+          },
+          "think": {
+            "provider": {
+              "type": "open_ai",
+              "model": "gpt-4o-mini"
+            },
+            "prompt": "You are a concise wire testing assistant. For every user request asking for a lookup call lookup_status exactly once with their label, then speak its returned status. When asked to cancel, do not call tools and just say hello.",
+            "functions": [
+              {
+                "name": "lookup_status",
+                "description": "Look up a test status by label.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label"
+                  ]
+                }
+              }
+            ]
+          },
+          "speak": {
+            "provider": {
+              "type": "deepgram",
+              "model": "aura-2-thalia-en"
+            }
+          }
+        }
+      }
+    },
+    {
+      "ms": 447,
+      "direction": "server",
+      "message": {
+        "type": "SettingsApplied"
+      }
+    },
+    {
+      "ms": 447,
+      "direction": "client",
+      "message": {
+        "type": "UpdatePrompt",
+        "prompt": "The test context code is W302."
+      }
+    },
+    {
+      "ms": 539,
+      "direction": "server",
+      "message": {
+        "type": "PromptUpdated"
+      }
+    },
+    {
+      "ms": 539,
+      "direction": "client",
+      "message": {
+        "type": "InjectAgentMessage",
+        "message": "Ready for the wire test."
+      }
+    },
+    {
+      "ms": 662,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 662,
+      "direction": "server",
+      "message": {
+        "type": "ConversationText",
+        "role": "assistant",
+        "content": "Ready for the wire test.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 662,
+      "direction": "server",
+      "message": {
+        "type": "History",
+        "role": "assistant",
+        "content": "Ready for the wire test.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 662,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 716,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 722,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 722,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 722,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 722,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 722,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 759,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 828,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 828,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 828,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 889,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 901,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 901,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 901,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 901,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 901,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 901,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 909,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 909,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 920,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 920,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 932,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 933,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 974,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 981,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 981,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 981,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 985,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 986,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1004,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1004,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1027,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1027,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1044,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1053,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1072,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1075,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1081,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1082,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1103,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1115,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1121,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1121,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1132,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1132,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1148,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1148,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1167,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1167,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1185,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1185,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1202,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1203,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1220,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1220,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1239,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1242,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1260,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1260,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1277,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1277,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1293,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1294,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1315,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1315,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1330,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1330,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1348,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1348,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1365,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1366,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1383,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1383,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1402,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1402,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 1402,
+      "direction": "server",
+      "message": {
+        "type": "AgentAudioDone"
+      }
+    },
+    {
+      "ms": 3042,
+      "direction": "client",
+      "message": {
+        "type": "InjectUserMessage",
+        "content": "Please lookup status for label first."
+      }
+    },
+    {
+      "ms": 3110,
+      "direction": "server",
+      "message": {
+        "type": "UserStartedSpeaking"
+      }
+    },
+    {
+      "ms": 3110,
+      "direction": "server",
+      "message": {
+        "type": "ConversationText",
+        "role": "user",
+        "content": "Please lookup status for label first.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 3110,
+      "direction": "server",
+      "message": {
+        "type": "History",
+        "role": "user",
+        "content": "Please lookup status for label first.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 3110,
+      "direction": "server",
+      "message": {
+        "type": "EndOfTurn",
+        "trigger": "manual"
+      }
+    },
+    {
+      "ms": 3753,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_token_latency": 0.646825355
+      }
+    },
+    {
+      "ms": 3753,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_tool_latency": 0.646862173
+      }
+    },
+    {
+      "ms": 3753,
+      "direction": "server",
+      "message": {
+        "type": "FunctionCallRequest",
+        "functions": [
+          {
+            "id": "call_O2pleDNj10JUcQpLYZPxA4yN",
+            "name": "lookup_status",
+            "arguments": "{\"label\":\"first\"}",
+            "client_side": true
+          }
+        ]
+      }
+    },
+    {
+      "ms": 3753,
+      "direction": "client",
+      "message": {
+        "type": "FunctionCallResponse",
+        "id": "call_O2pleDNj10JUcQpLYZPxA4yN",
+        "name": "lookup_status",
+        "content": "{\"status\":\"first lookup complete\",\"context\":\"W302\"}"
+      }
+    },
+    {
+      "ms": 3820,
+      "direction": "server",
+      "message": {
+        "type": "FunctionCallResponse",
+        "id": "call_O2pleDNj10JUcQpLYZPxA4yN",
+        "name": "lookup_status",
+        "content": "{\"status\":\"first lookup complete\",\"context\":\"W302\"}"
+      }
+    },
+    {
+      "ms": 3820,
+      "direction": "server",
+      "message": {
+        "type": "History",
+        "function_calls": [
+          {
+            "id": "call_O2pleDNj10JUcQpLYZPxA4yN",
+            "name": "lookup_status",
+            "client_side": false,
+            "arguments": "{\"label\":\"first\"}",
+            "response": "{\"status\":\"first lookup complete\",\"context\":\"W302\"}"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 4468,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_token_latency": 0.646825355
+      }
+    },
+    {
+      "ms": 4468,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_text_latency": 1.36097453
+      }
+    },
+    {
+      "ms": 4525,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4525,
+      "direction": "server",
+      "message": {
+        "type": "ConversationText",
+        "role": "assistant",
+        "content": "The status for the label \"first\" is: first lookup complete.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 4525,
+      "direction": "server",
+      "message": {
+        "type": "History",
+        "role": "assistant",
+        "content": "The status for the label \"first\" is: first lookup complete.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 4525,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "tts_latency": 0.057923324
+      }
+    },
+    {
+      "ms": 4525,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "total_latency": 1.418900327
+      }
+    },
+    {
+      "ms": 4526,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4542,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4542,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4561,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4561,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4579,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4579,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4597,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4597,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4615,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4615,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4633,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4633,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4651,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4651,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4669,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4669,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4692,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4692,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4708,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4709,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4725,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4726,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4742,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4742,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4759,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4759,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4778,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4778,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4796,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4796,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4814,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4814,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4832,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4832,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4851,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4851,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4868,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4868,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4888,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4888,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4908,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4909,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4926,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4926,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4943,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4943,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4960,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4960,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4977,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4977,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4996,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 4996,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5005,
+      "direction": "client",
+      "message": {
+        "type": "KeepAlive"
+      }
+    },
+    {
+      "ms": 5014,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5014,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5033,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5033,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5051,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5051,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5068,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5068,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5086,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5104,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5104,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5104,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5125,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5126,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5143,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5143,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5159,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5159,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5176,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5177,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5194,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5194,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5213,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5213,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5231,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5231,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5249,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5249,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5267,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5267,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5285,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5285,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5303,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5304,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5321,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5321,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5343,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5343,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5358,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5358,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5378,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5378,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5396,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5396,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5414,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5414,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5433,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5433,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5451,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5451,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5469,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5469,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5486,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5486,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5505,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5509,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5525,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5525,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5542,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5542,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5559,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5559,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5578,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5578,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5596,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5596,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5614,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5614,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5632,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5632,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5650,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5650,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5667,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5668,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5686,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5686,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5704,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5704,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5725,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5725,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5742,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5743,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5759,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5759,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5777,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5777,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5795,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5795,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5814,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5814,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5831,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5832,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5850,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5850,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5868,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5868,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5886,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5886,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5904,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5904,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5922,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5925,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5942,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5942,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5959,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5960,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5977,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5977,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5995,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 5995,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6014,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6014,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6031,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6031,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6049,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6050,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6068,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6068,
+      "direction": "server",
+      "message": {
+        "type": "binary",
+        "bytes": 960
+      }
+    },
+    {
+      "ms": 6109,
+      "direction": "server",
+      "message": {
+        "type": "AgentAudioDone"
+      }
+    },
+    {
+      "ms": 7755,
+      "direction": "client",
+      "message": {
+        "type": "InjectUserMessage",
+        "content": "Please lookup status for label second."
+      }
+    },
+    {
+      "ms": 7825,
+      "direction": "server",
+      "message": {
+        "type": "UserStartedSpeaking"
+      }
+    },
+    {
+      "ms": 7825,
+      "direction": "server",
+      "message": {
+        "type": "ConversationText",
+        "role": "user",
+        "content": "Please lookup status for label second.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 7826,
+      "direction": "server",
+      "message": {
+        "type": "History",
+        "role": "user",
+        "content": "Please lookup status for label second.",
+        "conversational_behavior": "default"
+      }
+    },
+    {
+      "ms": 7826,
+      "direction": "server",
+      "message": {
+        "type": "EndOfTurn",
+        "trigger": "manual"
+      }
+    },
+    {
+      "ms": 8401,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_token_latency": 0.582715369
+      }
+    },
+    {
+      "ms": 8401,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_tool_latency": 0.582771815
+      }
+    },
+    {
+      "ms": 8401,
+      "direction": "server",
+      "message": {
+        "type": "FunctionCallRequest",
+        "functions": [
+          {
+            "id": "call_0REDO1BikmXvhBYg8gOZbc5L",
+            "name": "lookup_status",
+            "arguments": "{\"label\":\"second\"}",
+            "client_side": true
+          }
+        ]
+      }
+    },
+    {
+      "ms": 8904,
+      "direction": "client",
+      "message": {
+        "type": "audio_start",
+        "bytes": 119040
+      }
+    },
+    {
+      "ms": 9152,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 9392,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 9675,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 9676,
+      "direction": "server",
+      "message": {
+        "type": "UserStartedSpeaking"
+      }
+    },
+    {
+      "ms": 9676,
+      "direction": "server",
+      "message": {
+        "type": "FunctionCallCancelled",
+        "functions": [
+          {
+            "id": "call_0REDO1BikmXvhBYg8gOZbc5L",
+            "name": "lookup_status"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 9676,
+      "direction": "server",
+      "message": {
+        "type": "History",
+        "function_calls": [
+          {
+            "id": "call_0REDO1BikmXvhBYg8gOZbc5L",
+            "name": "lookup_status",
+            "client_side": false,
+            "arguments": "{\"label\":\"second\"}",
+            "response": "{\"status\":\"CANCELLED\"}"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 9912,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 10004,
+      "direction": "client",
+      "message": {
+        "type": "KeepAlive"
+      }
+    },
+    {
+      "ms": 10152,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 10392,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 10671,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 10912,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 11152,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 11391,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 11675,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 11912,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 12152,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 12392,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 12675,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 12754,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "stt_latency": 0
+      }
+    },
+    {
+      "ms": 12808,
+      "direction": "client",
+      "message": {
+        "type": "audio_end"
+      }
+    },
+    {
+      "ms": 13449,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_token_latency": 0.69643764
+      }
+    },
+    {
+      "ms": 13492,
+      "direction": "server",
+      "message": {
+        "type": "LatencyReport",
+        "ttt_text_latency": 0.696493469
+      }
+    }
+  ]
+}

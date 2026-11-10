@@ -1,0 +1,45 @@
+{
+  "time": "2026-11-10T21:22:25.662Z",
+  "grant": {
+    "status": 200,
+    "fields": [
+      "access_token",
+      "expires_in"
+    ]
+  },
+  "browser": [
+    {
+      "endpoint": "wss://agent.deepgram.com",
+      "method": "bearer-subprotocol",
+      "opened": false,
+      "event": "browser_error",
+      "frames": []
+    },
+    {
+      "endpoint": "wss://agent.deepgram.com",
+      "method": "query-token",
+      "opened": false,
+      "event": "browser_error",
+      "frames": []
+    },
+    {
+      "endpoint": "wss://agent.deepgram.com/v1/agent/converse",
+      "method": "bearer-subprotocol",
+      "opened": true,
+      "event": "message",
+      "frames": [
+        {
+          "type": "Welcome",
+          "request_id": "01a1c757-4886-7fe0-b596-81349b386c5b"
+        }
+      ]
+    },
+    {
+      "endpoint": "wss://agent.deepgram.com/v1/agent/converse",
+      "method": "query-token",
+      "opened": false,
+      "event": "browser_error",
+      "frames": []
+    }
+  ]
+}
