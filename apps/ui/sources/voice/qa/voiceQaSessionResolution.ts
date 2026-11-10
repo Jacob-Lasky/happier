@@ -1,3 +1,4 @@
+import { isRealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import { storage } from '@/sync/domains/state/storage';
 import { resolveVoiceOperationalSessionId } from '@/voice/sessionBinding/resolveVoiceOperationalSessionId';
 import { isVoiceConversationSystemSessionMetadata } from '@/voice/sessionBinding/voiceConversationSystemSessionLookup';
@@ -43,7 +44,7 @@ export function formatVoiceQaPermissionModeLabel(mode: unknown): string {
 
 export function resolveConfiguredVoiceQaProvider(settings: any): VoiceQaProvider {
     const providerId = String(settings?.voice?.providerId ?? 'off').trim();
-    if (providerId === 'realtime_elevenlabs') return 'realtime_elevenlabs';
+    if (isRealtimeVoiceProviderId(providerId)) return providerId;
     return 'local_voice_agent';
 }
 

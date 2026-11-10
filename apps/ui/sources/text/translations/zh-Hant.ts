@@ -7753,6 +7753,8 @@ settingsSession: {
         modeTitle: '語音',
         modeDescription: '設定語音功能。您可以完全關閉語音、使用 Happier Voice（需要訂閱），或使用您自己的 ElevenLabs 帳戶。',
         mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "透過此伺服器進行即時語音對話（網頁和 Linux 桌面）",
             off: '關閉',
             offSubtitle: '關閉所有語音功能',
             happier: 'Happier Voice',

@@ -1,3 +1,4 @@
+import { isRealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import {
   ensureVoiceConversationSessionForSessionRoot,
   ensureVoiceConversationSessionForVoiceHome,
@@ -62,7 +63,7 @@ export async function ensureVoiceConversationBindingResolution(params: Readonly<
       ? await ensureVoiceConversationSessionForSessionRoot({ sessionId: rootSessionId })
       : await ensureVoiceHomeConversationSessionIdWithRecovery(params);
 
-  if (params.providerId === 'realtime_elevenlabs') {
+  if (isRealtimeVoiceProviderId(params.providerId)) {
     const conversationSessionId = await resolveConversationSessionId();
     return {
       controlSessionId,

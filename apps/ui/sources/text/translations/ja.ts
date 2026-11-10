@@ -9362,6 +9362,8 @@ settingsSession: {
     modeDescription:
       "音声機能を設定します。音声を完全に無効にするか、Happier Voice（サブスクリプションが必要）を使用するか、ご自身のElevenLabsアカウントを使用できます。",
     mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "このサーバー経由のリアルタイム音声（Web・Linuxデスクトップ）",
       off: "オフ",
       offSubtitle: "すべての音声機能を無効化",
       happier: "Happier Voice",

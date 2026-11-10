@@ -9093,6 +9093,8 @@ settingsSession: {
     modeDescription:
       "Настройте голосовые функции. Вы можете полностью отключить голос, использовать Happier Voice (требуется подписка) или использовать свой аккаунт ElevenLabs.",
     mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "Голосовое общение через этот сервер в реальном времени (веб и Linux)",
       off: "Выключено",
       offSubtitle: "Отключить все голосовые функции",
       happier: "Happier Voice",

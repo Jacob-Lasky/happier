@@ -2,6 +2,9 @@ export interface VoiceSessionConfig {
     sessionId: string;
     initialContext?: string;
     token?: string;
+    leaseId?: string;
+    signal?: AbortSignal;
+    onConversationId?: (id: string) => void;
     signedUrl?: string;
     textOnly?: boolean;
 }

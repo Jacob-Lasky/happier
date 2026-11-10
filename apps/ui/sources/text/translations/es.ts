@@ -9117,6 +9117,8 @@ settingsSession: {
     modeDescription:
       "Configura las funciones de voz. Puedes desactivar la voz por completo, usar Happier Voice (requiere suscripción) o usar tu propia cuenta de ElevenLabs.",
     mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "Voz en tiempo real a través de este servidor (web y escritorio Linux)",
       off: "Desactivado",
       offSubtitle: "Desactivar todas las funciones de voz",
       happier: "Happier Voice",

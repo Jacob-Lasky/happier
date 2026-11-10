@@ -28,12 +28,12 @@ describe('ensureVoiceConversationBindingResolution', () => {
     setVoiceAgentRecoveryReplaySource.mockReset();
   });
 
-  it('binds realtime voice to the target session root when a target session exists', async () => {
+  it.each(['realtime_elevenlabs', 'realtime_deepgram'])('binds %s to the target session root when a target session exists', async (providerId) => {
     ensureVoiceConversationSessionForSessionRoot.mockResolvedValue('voice-root-s1');
 
     const { ensureVoiceConversationBindingResolution } = await import('./resolveVoiceConversationSessionId');
     const resolution = await ensureVoiceConversationBindingResolution({
-      providerId: 'realtime_elevenlabs',
+      providerId,
       controlSessionId: '__voice_agent__',
       requestedTargetSessionId: 's1',
       settings: {},

@@ -133,5 +133,5 @@ export {
 } from './actionCatalog.js';
 
 export { zodSchemaToJsonSchemaObject, type JsonSchemaObject } from './actionInputJsonSchema.js';
-export { actionSpecToElevenLabsClientToolParameters } from './actionInputElevenLabsToolSchema.js';
+export { actionSpecToVoiceClientToolParameters, actionSpecToElevenLabsClientToolParameters } from './actionInputElevenLabsToolSchema.js';
 export { resolveRequestedSessionModeId } from './sessionModeIds.js';

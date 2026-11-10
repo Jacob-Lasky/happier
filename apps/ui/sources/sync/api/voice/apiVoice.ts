@@ -31,7 +31,7 @@ function isVoiceTokenResponse(value: unknown): value is VoiceTokenResponse {
 
 export async function fetchHappierVoiceToken(
     credentials: AuthCredentials,
-    opts?: { sessionId?: string | null; signal?: AbortSignal; timeoutMs?: number },
+    opts?: { providerId?: "elevenlabs" | "deepgram"; sessionId?: string | null; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<VoiceTokenResponse> {
     const timeoutMs = opts?.timeoutMs ?? 10_000;
     const controller = new AbortController();
@@ -50,7 +50,7 @@ export async function fetchHappierVoiceToken(
     let response: Response;
     try {
         const sessionId = typeof opts?.sessionId === 'string' ? opts.sessionId.trim() : '';
-        const body = sessionId ? { sessionId } : {};
+        const body = { ...(sessionId ? { sessionId } : {}), ...(opts?.providerId === "deepgram" ? { providerId: opts.providerId } : {}) };
 
         response = await serverFetch('/v1/voice/token', {
             method: 'POST',

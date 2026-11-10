@@ -1,3 +1,4 @@
+import { isRealtimeVoiceProviderId, type RealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import type { VoiceSession } from './types';
 import { completeHappierVoiceSession, fetchHappierVoiceToken } from '@/sync/api/voice/apiVoice';
 import { storage } from '@/sync/domains/state/storage';
@@ -14,7 +15,10 @@ import { resolveVoiceSessionBindingByControlSessionId } from '@/voice/sessionBin
 import { appendVoiceConversationNoteText } from '@/voice/sessionBinding/voiceConversationTranscript';
 import { applyVoiceSessionTargetSelection } from '@/voice/sessionBinding/applyVoiceSessionTargetSelection';
 
+type RealtimeProviderId = RealtimeVoiceProviderId;
+const voiceSessions = new Map<RealtimeProviderId, VoiceSession>();
 let voiceSession: VoiceSession | null = null;
+let currentAdapterId: RealtimeProviderId = 'realtime_elevenlabs';
 let voiceSessionStarted: boolean = false;
 let startInFlight: Promise<void> | null = null;
 let startInFlightAbortController: AbortController | null = null;
@@ -58,7 +62,7 @@ function appendRealtimeLeaseNote(text: string): void {
     if (!controlSessionId) return;
     const binding = resolveVoiceSessionBindingByControlSessionId({
         controlSessionId,
-        adapterId: 'realtime_elevenlabs',
+        adapterId: currentAdapterId,
     });
     const conversationSessionId = binding?.conversationSessionId?.trim();
     if (!conversationSessionId) return;
@@ -89,6 +93,7 @@ function scheduleRealtimeLeaseAnnouncements(expiresAtMs: number): void {
 
     currentLeaseExpiryTimer = setTimeout(() => {
         appendRealtimeLeaseNote(t('errors.voiceSessionLimitExpired'));
+        void stopRealtimeSession();
     }, remainingMs);
 }
 
@@ -128,7 +133,9 @@ export async function startRealtimeSession(
     retryAfterPaywall = false,
     options?: Readonly<{ textOnly?: boolean }>,
 ) {
-    const session = voiceSession;
+    const selectedProviderId = storage.getState().settings.voice.providerId;
+    if (!isRealtimeVoiceProviderId(selectedProviderId)) return;
+    const session = voiceSessions.get(selectedProviderId);
     if (!session) {
         console.warn('No voice session registered');
         return;
@@ -148,7 +155,7 @@ export async function startRealtimeSession(
 
     const settings: any = storage.getState().settings;
     const providerId = settings?.voice?.providerId ?? 'off';
-    if (providerId !== 'realtime_elevenlabs') {
+    if (providerId !== 'realtime_elevenlabs' && providerId !== 'realtime_deepgram') {
         return;
     }
 
@@ -158,6 +165,12 @@ export async function startRealtimeSession(
         return;
     }
     
+    if (voiceSessionStarted) {
+        if (currentAdapterId === selectedProviderId) return;
+        await stopRealtimeSession();
+    }
+    currentAdapterId = selectedProviderId;
+    voiceSession = session;
     const abortController = new AbortController();
     startInFlightAbortController = abortController;
 
@@ -179,11 +192,11 @@ export async function startRealtimeSession(
                 return;
             }
 
-            const realtimeCfg = settings?.voice?.adapters?.realtime_elevenlabs ?? null;
-            const billingMode = realtimeCfg?.billingMode === 'byo' ? 'byo' : 'happier';
+            const realtimeCfg = settings?.voice?.adapters?.[selectedProviderId] ?? null;
+            const billingMode = selectedProviderId === 'realtime_elevenlabs' && realtimeCfg?.billingMode === 'byo' ? 'byo' : 'happier';
             const effectiveInitialContext = appendOptionalWelcomeToContext(initialContext, realtimeCfg?.welcome);
             await voiceSessionBindingManager.ensureBound({
-                adapterId: 'realtime_elevenlabs',
+                adapterId: currentAdapterId,
                 controlSessionId,
                 requestedTargetSessionId,
             });
@@ -251,15 +264,24 @@ export async function startRealtimeSession(
             for (;;) {
                 const response = await fetchHappierVoiceToken(credentials, {
                     sessionId: requestedTargetSessionId,
+                    ...(selectedProviderId === 'realtime_deepgram' ? { providerId: 'deepgram' as const } : {}),
                     signal: abortController.signal,
                 });
                 if (abortController.signal.aborted) return;
                 if (response.allowed) {
+                    currentLeaseId = response.leaseId;
+                    currentBilledMode = 'happier';
+                    currentControlSessionId = controlSessionId;
                     await enableVoiceBackgroundCallAudioMode();
                     const conversationId = await session.startSession({
                         sessionId: controlSessionId,
                         initialContext: effectiveInitialContext,
                         token: response.token,
+                        ...(selectedProviderId === "realtime_deepgram" ? {
+                            leaseId: response.leaseId,
+                            signal: abortController.signal,
+                            onConversationId: (id: string) => { if (!abortController.signal.aborted) currentProviderConversationId = id; },
+                        } : {}),
                         textOnly: options?.textOnly === true,
                     });
                     if (typeof conversationId !== 'string' || conversationId.trim().length === 0) {
@@ -314,6 +336,8 @@ export async function startRealtimeSession(
                 return;
             }
             console.error('Failed to start realtime session:', error);
+            await session.endSession().catch(() => {});
+            await completeCurrentManagedVoiceSession();
             voiceSessionStarted = false;
             currentProviderConversationId = null;
             currentLeaseId = null;
@@ -333,6 +357,27 @@ export async function startRealtimeSession(
             startInFlightAbortController = null;
         }
     }
+}
+
+async function completeCurrentManagedVoiceSession(): Promise<void> {
+        if (currentBilledMode === 'happier' && currentLeaseId && currentProviderConversationId) {
+            const credentials = await TokenStorage.getCredentials();
+            if (credentials) {
+                try {
+                    await completeHappierVoiceSession(credentials, {
+                        leaseId: currentLeaseId,
+                        providerConversationId: currentProviderConversationId,
+                    });
+                } catch (error) {
+                    console.warn('Failed to complete Happier voice session:', {
+                        leaseId: currentLeaseId,
+                        providerConversationId: currentProviderConversationId,
+                        error,
+                    });
+                }
+            }
+        }
+
 }
 
 export async function stopRealtimeSession() {
@@ -356,23 +401,7 @@ export async function stopRealtimeSession() {
         }
         await voiceSession.endSession();
 
-        if (currentBilledMode === 'happier' && currentLeaseId && currentProviderConversationId) {
-            const credentials = await TokenStorage.getCredentials();
-            if (credentials) {
-                try {
-                    await completeHappierVoiceSession(credentials, {
-                        leaseId: currentLeaseId,
-                        providerConversationId: currentProviderConversationId,
-                    });
-                } catch (error) {
-                    console.warn('Failed to complete Happier voice session:', {
-                        leaseId: currentLeaseId,
-                        providerConversationId: currentProviderConversationId,
-                        error,
-                    });
-                }
-            }
-        }
+        await completeCurrentManagedVoiceSession();
 
         voiceSessionStarted = false;
         latestRequestedTargetSessionId = null;
@@ -389,8 +418,9 @@ export async function stopRealtimeSession() {
     }
 }
 
-export function registerVoiceSession(session: VoiceSession) {
-    voiceSession = session;
+export function registerVoiceSession(session: VoiceSession, providerId: RealtimeProviderId = "realtime_elevenlabs") {
+    voiceSessions.set(providerId, session);
+    if (!voiceSession || (!voiceSessionStarted && !startInFlight && providerId === storage.getState().settings.voice.providerId)) voiceSession = session;
 }
 
 export function isVoiceSessionStarted(): boolean {
@@ -398,7 +428,7 @@ export function isVoiceSessionStarted(): boolean {
 }
 
 export function getVoiceSession(): VoiceSession | null {
-    return voiceSession;
+    return voiceSessionStarted ? voiceSession : voiceSessions.get(storage.getState().settings.voice.providerId as RealtimeProviderId) ?? null;
 }
 
 export function getCurrentRealtimeControlSessionId(): string | null {
@@ -407,4 +437,8 @@ export function getCurrentRealtimeControlSessionId(): string | null {
 
 export function setCurrentRealtimeControlSessionId(sessionId: string | null): void {
     currentControlSessionId = sessionId;
+}
+
+export function getCurrentRealtimeProviderId(): RealtimeVoiceProviderId {
+    return currentAdapterId;
 }

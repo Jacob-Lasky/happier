@@ -8637,6 +8637,8 @@ settingsSession: {
         modeDescription:
             'Configure les fonctionnalités vocales. Selon les capacités du serveur, choisis Happier Voice, la voix locale, ou ton propre compte ElevenLabs.',
         mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "Voix en temps réel via ce serveur (web et bureau Linux)",
             off: 'Désactivé',
             offSubtitle: 'Désactiver toutes les fonctionnalités vocales',
             happier: 'Happier Voice',

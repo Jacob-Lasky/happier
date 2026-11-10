@@ -5,9 +5,17 @@ import { DEFAULT_ELEVENLABS_VOICE_ID } from '@/realtime/elevenlabs/defaults';
 import { VoiceLocalSttSchema } from './voiceLocalSttSettings';
 import { VoiceLocalTtsSchema } from './voiceLocalTtsSettings';
 
+export const RealtimeVoiceProviderIdSchema = z.enum(['realtime_elevenlabs', 'realtime_deepgram']);
+
+export type RealtimeVoiceProviderId = z.infer<typeof RealtimeVoiceProviderIdSchema>;
+
+export function isRealtimeVoiceProviderId(value: unknown): value is RealtimeVoiceProviderId {
+  return RealtimeVoiceProviderIdSchema.safeParse(value).success;
+}
+
 export const VoiceProviderIdSchema = z.enum([
   'off',
-  'realtime_elevenlabs',
+  ...RealtimeVoiceProviderIdSchema.options,
   'local_direct',
   'local_conversation',
 ]);
@@ -42,6 +50,13 @@ const VoiceUiSchema = z.object({
   activityFeedEnabled: z.boolean().default(false),
   activityFeedAutoExpandOnStart: z.boolean().default(false),
   updates: VoiceUiUpdatesSchema.prefault({}),
+});
+
+const VoiceRealtimeDeepgramSchema = z.object({
+  assistantLanguage: z.string().nullable().default(null),
+  listenModel: z.string().default('flux-general-en'),
+  thinkModel: z.string().default('gpt-4o-mini'),
+  speakModel: z.string().default('aura-2-thalia-en'),
 });
 
 const VoiceRealtimeElevenLabsSchema = z.object({
@@ -265,6 +280,7 @@ export const VoiceSettingsSchema = z.object({
   adapters: z
     .object({
       realtime_elevenlabs: VoiceRealtimeElevenLabsSchema.prefault({}),
+      realtime_deepgram: VoiceRealtimeDeepgramSchema.prefault({}),
       local_direct: VoiceLocalDirectSchema.prefault({}),
       local_conversation: VoiceLocalConversationSchema.prefault({}),
     })
@@ -368,6 +384,8 @@ export function voiceSettingsParse(input: unknown): VoiceSettings {
     const a = raw.adapters as Record<string, unknown>;
     const rt = parseDroppingInvalidFields(VoiceRealtimeElevenLabsSchema, a.realtime_elevenlabs);
     if (rt) base.adapters.realtime_elevenlabs = rt;
+    const dg = parseDroppingInvalidFields(VoiceRealtimeDeepgramSchema, a.realtime_deepgram);
+    if (dg) base.adapters.realtime_deepgram = dg;
     const ld = parseDroppingInvalidFields(VoiceLocalDirectSchema, a.local_direct);
     if (ld) base.adapters.local_direct = ld;
     const lc = parseDroppingInvalidFields(VoiceLocalConversationSchema, a.local_conversation);

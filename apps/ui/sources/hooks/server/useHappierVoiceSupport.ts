@@ -6,7 +6,7 @@ import { useFeatureDecision } from './useFeatureDecision';
  * This fails closed: if the decision cannot be resolved (network error / not fetched yet),
  * treat the feature as disabled so UI does not assume support.
  */
-export function useHappierVoiceSupport(): boolean {
-    const decision = useFeatureDecision('voice.happierVoice');
+export function useHappierVoiceSupport(providerId: string = 'realtime_elevenlabs'): boolean {
+    const decision = useFeatureDecision(providerId === 'realtime_deepgram' ? 'voice.deepgram' : 'voice.happierVoice');
     return decision?.state === 'enabled';
 }

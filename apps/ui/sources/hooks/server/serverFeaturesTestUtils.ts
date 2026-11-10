@@ -156,6 +156,7 @@ export function buildServerFeaturesResponse(overrides: FixtureOverrides = {}): F
             voice: {
                 enabled: voiceEnabled,
                 happierVoice: { enabled: happierVoiceEnabled },
+                deepgram: { enabled: false },
             },
             social: {
                 friends: {

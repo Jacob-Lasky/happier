@@ -24,6 +24,7 @@ vi.mock('@/realtime/RealtimeSession', () => ({
   stopRealtimeSession,
   getCurrentRealtimeSessionId,
   getVoiceSession,
+  getCurrentRealtimeProviderId: () => "realtime_elevenlabs",
   isVoiceSessionStarted,
 }));
 

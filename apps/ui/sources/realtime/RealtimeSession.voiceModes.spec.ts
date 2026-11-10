@@ -230,6 +230,60 @@ describe('Realtime voice modes', () => {
   });
 
   describe('provider selection', () => {
+    it('mints for Deepgram and completes the same lease after stopping its registered runtime', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const dg = makeVoiceSession('dg_request');
+      const el = makeVoiceSession('el_conversation');
+      registerVoiceSession(el.session);
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      await startRealtimeSession('s1', 'context');
+      expect(fetchHappierVoiceToken).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ providerId: 'deepgram' }));
+      expect(dg.startSession).toHaveBeenCalledWith(expect.objectContaining({ token: 'grant', leaseId: 'dg_lease' }));
+      expect(el.startSession).not.toHaveBeenCalled();
+      await stopRealtimeSession();
+      expect(dg.endSession).toHaveBeenCalled();
+      expect(completeHappierVoiceSession).toHaveBeenCalledWith(expect.anything(), { leaseId: 'dg_lease', providerConversationId: 'dg_request' });
+    });
+
+    it('completes a Deepgram request when Stop cancels microphone startup', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const dg = makeVoiceSession('unused');
+      const entered = createDeferred<void>();
+      dg.session.startSession = async config => {
+        config.onConversationId?.('dg_starting_request');
+        entered.resolve();
+        await new Promise<void>((_resolve, reject) => config.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+        return null;
+      };
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      const starting = startRealtimeSession('s1');
+      await entered.promise;
+      await stopRealtimeSession();
+      void starting;
+      expect(completeHappierVoiceSession).toHaveBeenCalledWith(expect.anything(), { leaseId: 'dg_lease', providerConversationId: 'dg_starting_request' });
+    });
+
+    it('ends the active provider and completes its lease before switching realtime providers', async () => {
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const el = makeVoiceSession('el_request');
+      const dg = makeVoiceSession('dg_request');
+      registerVoiceSession(el.session);
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'el_token', leaseId: 'el_lease', expiresAtMs: Date.now() + 60000 });
+      await startRealtimeSession('s1');
+      state.settings.voice.providerId = 'realtime_deepgram';
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'dg_token', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      await startRealtimeSession('s1');
+      expect(el.endSession).toHaveBeenCalled();
+      expect(completeHappierVoiceSession).toHaveBeenCalledWith(expect.anything(), { leaseId: 'el_lease', providerConversationId: 'el_request' });
+      expect(dg.startSession).toHaveBeenCalled();
+      await stopRealtimeSession();
+    });
+
     it('does nothing when voice provider is off', async () => {
       state.settings.voice.providerId = 'off';
       const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
@@ -264,7 +318,7 @@ describe('Realtime voice modes', () => {
   describe('happier voice lifecycle', () => {
     it('records the session limit and announces when the server-minted lease is near expiry', async () => {
       const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
-      const { session } = makeVoiceSession('conv_0');
+      const { session, endSession } = makeVoiceSession('conv_0');
       registerVoiceSession(session);
 
       vi.useFakeTimers();
@@ -295,6 +349,7 @@ describe('Realtime voice modes', () => {
         );
 
         await vi.advanceTimersByTimeAsync(40);
+        expect(endSession).toHaveBeenCalled();
 
         expect(appendVoiceConversationNoteText).toHaveBeenCalledWith(
           expect.objectContaining({

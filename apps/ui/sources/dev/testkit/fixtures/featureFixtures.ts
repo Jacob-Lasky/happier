@@ -139,7 +139,7 @@ const BASE_ROOT_LAYOUT_FEATURES: RootLayoutFeatures = {
         terminal: {
             embeddedPty: { enabled: false },
         },
-        voice: { enabled: false, happierVoice: { enabled: false } },
+        voice: { enabled: false, happierVoice: { enabled: false }, deepgram: { enabled: false } },
         social: {
             friends: {
                 enabled: true,

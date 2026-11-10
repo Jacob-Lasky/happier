@@ -1,3 +1,4 @@
+import { isRealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import { VOICE_AGENT_GLOBAL_SESSION_ID } from '@/voice/agent/voiceAgentGlobalSessionId';
 import { storage } from '@/sync/domains/state/storage';
 import { resolveVoiceSessionBindingByControlSessionId } from '@/voice/sessionBinding/resolveVoiceSessionBinding';
@@ -312,7 +313,7 @@ export function createVoiceQaController(
       }
 
       const binding = deps.getRealtimeBinding(sessionId);
-      if (binding?.adapterId === 'realtime_elevenlabs') {
+      if (isRealtimeVoiceProviderId(binding?.adapterId)) {
         deps.qaStore.getState().setResolvedSessions({
           targetSessionId,
           runtimeSessionId: normalizeVoiceQaText(binding.conversationSessionId) || targetSessionId,

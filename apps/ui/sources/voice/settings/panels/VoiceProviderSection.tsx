@@ -1,4 +1,6 @@
 import * as React from 'react';
+import { Platform } from 'react-native';
+import { useFeatureDecision } from '@/hooks/server/useFeatureDecision';
 
 import { useUnistyles } from 'react-native-unistyles';
 
@@ -14,6 +16,7 @@ export function VoiceProviderSection(props: {
   happierVoiceSupported: boolean;
 }) {
   const { theme } = useUnistyles();
+  const deepgramDecision = useFeatureDecision("voice.deepgram");
   const select = (next: VoiceSettings) => props.setVoice(next);
 
   const billingMode = props.voice.adapters.realtime_elevenlabs.billingMode;
@@ -50,6 +53,16 @@ export function VoiceProviderSection(props: {
           showChevron={false}
         />
       )}
+
+      {Platform.OS === 'web' && deepgramDecision?.state === 'enabled' ? (
+        <Item
+          title={t('settingsVoice.mode.deepgram')}
+          subtitle={t('settingsVoice.mode.deepgramSubtitle')}
+          rightElement={props.voice.providerId === 'realtime_deepgram' ? <Icon name="check-circle" size={24} color={theme.colors.accent.blue} /> : null}
+          onPress={() => select({ ...props.voice, providerId: 'realtime_deepgram' })}
+          showChevron={false}
+        />
+      ) : null}
 
       <Item
         title={t('settingsVoice.mode.byo')}

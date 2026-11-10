@@ -1,3 +1,4 @@
+import { isRealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import * as React from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { usePathname } from 'expo-router';
@@ -88,7 +89,7 @@ export function VoiceSurface(props: Readonly<{ variant: VoiceSurfaceVariant; ses
     providerId === 'local_conversation' ? (voice?.adapters?.local_conversation?.conversationMode ?? 'direct_session') : null;
   const voiceAgentEnabled = useFeatureEnabled('voice.agent');
   const allowsGlobalStart =
-    providerId === 'realtime_elevenlabs' || (providerId === 'local_conversation' && localConversationMode === 'agent');
+    isRealtimeVoiceProviderId(providerId) || (providerId === 'local_conversation' && localConversationMode === 'agent');
 
   const localAgentCfg = providerId === 'local_conversation' ? voice?.adapters?.local_conversation?.agent ?? null : null;
   const daemonLocalVoiceUnavailable =
@@ -176,7 +177,7 @@ export function VoiceSurface(props: Readonly<{ variant: VoiceSurfaceVariant; ses
   );
   const controlSessionCandidates = React.useMemo(() => ([
     typeof snap.sessionId === 'string' ? snap.sessionId.trim() : '',
-    providerId === 'realtime_elevenlabs' || (providerId === 'local_conversation' && localConversationMode === 'agent')
+    isRealtimeVoiceProviderId(providerId) || (providerId === 'local_conversation' && localConversationMode === 'agent')
       ? VOICE_AGENT_GLOBAL_SESSION_ID
       : '',
     typeof props.sessionId === 'string' ? props.sessionId.trim() : '',

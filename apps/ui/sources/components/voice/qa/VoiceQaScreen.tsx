@@ -26,6 +26,8 @@ function getConfiguredProviderLabel(providerId: string): string {
   switch (providerId) {
     case 'local_conversation':
       return t('settingsVoice.mode.local');
+    case 'realtime_deepgram':
+      return 'Deepgram';
     case 'realtime_elevenlabs':
       return t('settingsVoice.mode.byo');
     case 'off':

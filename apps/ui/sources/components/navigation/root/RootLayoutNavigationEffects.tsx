@@ -85,10 +85,11 @@ export function RootLayoutNavigationEffects(): React.ReactElement | null {
         auto?: string | string[];
     }>();
     const debugRouterEnabled = process.env.EXPO_PUBLIC_DEBUG === '1';
-    const happierVoiceSupported = useHappierVoiceSupport();
+    const voiceProviderId = storage(state => state.settings.voice.providerId);
+    const happierVoiceSupported = useHappierVoiceSupport(voiceProviderId);
     const usesHappierVoice = storage((state) =>
-        state.settings.voice.providerId === 'realtime_elevenlabs'
-        && state.settings.voice.adapters.realtime_elevenlabs.billingMode === 'happier');
+        state.settings.voice.providerId === 'realtime_deepgram' || (state.settings.voice.providerId === 'realtime_elevenlabs'
+        && state.settings.voice.adapters.realtime_elevenlabs.billingMode === 'happier'));
     const activeServerAccountScope = useActiveServerAccountScope();
     const isTerminalConnectRoute = segments.includes('terminal') && segments.includes('connect');
 
@@ -244,8 +245,7 @@ export function RootLayoutNavigationEffects(): React.ReactElement | null {
 
             if (cancelled) return;
             const currentVoice = storage.getState().settings.voice;
-            if (currentVoice.providerId !== 'realtime_elevenlabs') return;
-            if (currentVoice.adapters.realtime_elevenlabs.billingMode !== 'happier') return;
+            if (currentVoice.providerId !== 'realtime_deepgram' && (currentVoice.providerId !== 'realtime_elevenlabs' || currentVoice.adapters.realtime_elevenlabs.billingMode !== 'happier')) return;
             applySystemSettings({ voice: { ...currentVoice, providerId: 'off' } });
         })(), { tag: 'RootLayout.happierVoiceGate' });
         return () => {

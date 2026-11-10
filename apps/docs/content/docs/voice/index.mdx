@@ -122,6 +122,16 @@ On native builds, active realtime ElevenLabs calls use a call-style audio mode s
 
 This background-call behavior applies to the realtime ElevenLabs path, not to Local voice.
 
+## Deepgram (experimental development builds)
+
+Web and Linux desktop development builds can use a server-managed Deepgram Voice Agent. Mobile support is a later phase. This option is shown only when the server advertises `voice.deepgram` as enabled.
+
+Set `DEEPGRAM_API_KEY` on the relay server. The key needs permission to grant temporary tokens and read request usage. If that key can access multiple projects, also set `DEEPGRAM_PROJECT_ID` so completed calls can be verified. Existing voice subscription, quota, concurrency, and session-duration controls apply to both managed providers.
+
+Choose **Deepgram** in **Settings → Voice**, then start voice from a session or the global voice surface. The server issues a temporary grant; the browser connects directly to Deepgram. Coding actions use Happier's existing action permissions and privacy controls. Speaking while the assistant talks interrupts playback, and cancelled tool calls cannot send late results back to the agent.
+
+Stopping a call reports its request ID to the relay. The relay verifies Deepgram's request metadata and lease tag, records the measured duration, and releases the concurrency slot. If verification fails, completion is reported as an error and the lease remains reserved until expiry.
+
 ## Use my ElevenLabs
 
 **Use my ElevenLabs** also runs a realtime ElevenLabs conversation, but it uses your own ElevenLabs account settings.

@@ -8,6 +8,7 @@ describe('createBuiltinVoiceAdapters', () => {
 
     expect(ids).toEqual([
       'realtime_elevenlabs',
+      'realtime_deepgram',
       'local_direct',
       'local_conversation',
     ]);

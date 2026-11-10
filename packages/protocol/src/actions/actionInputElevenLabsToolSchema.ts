@@ -224,7 +224,7 @@ function sanitizeForElevenLabs(
  * This helper converts the Zod input schema and then sanitizes it into an
  * ElevenLabs-compatible subset, using `inputHints` for per-field descriptions.
  */
-export function actionSpecToElevenLabsClientToolParameters(
+export function actionSpecToVoiceClientToolParameters(
   spec: Pick<ActionSpec, 'id' | 'title' | 'description' | 'inputSchema' | 'inputHints'>,
   availability?: VoiceGuidanceAvailability,
 ): JsonSchemaObject {
@@ -244,3 +244,6 @@ export function actionSpecToElevenLabsClientToolParameters(
     ...(required.length > 0 ? { required } : {}),
   } as JsonSchemaObject;
 }
+
+// Compatibility name for existing ElevenLabs provisioning consumers.
+export const actionSpecToElevenLabsClientToolParameters = actionSpecToVoiceClientToolParameters;

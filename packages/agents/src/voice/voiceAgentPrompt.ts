@@ -107,7 +107,7 @@ export function buildVoiceAgentBasePrompt(params?: Readonly<{
   }));
 }
 
-export function buildElevenLabsVoiceAgentPrompt(params?: Readonly<{
+export function buildRealtimeVoiceAgentPrompt(params?: Readonly<{
   assistantName?: string;
   verbosity?: VoicePromptVerbosity;
   initialConversationContextPlaceholder?: string;
@@ -212,3 +212,6 @@ export function buildLocalVoiceAgentSystemPrompt(params?: Readonly<{
     }),
   }));
 }
+
+// Existing provisioning callers use the same realtime prompt.
+export const buildElevenLabsVoiceAgentPrompt = buildRealtimeVoiceAgentPrompt;

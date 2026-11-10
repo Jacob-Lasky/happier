@@ -1,8 +1,9 @@
+import { isRealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import { create } from 'zustand';
 
 import { randomUUID } from '@/platform/randomUUID';
 
-export type VoiceQaProvider = 'local_voice_agent' | 'realtime_elevenlabs';
+export type VoiceQaProvider = 'local_voice_agent' | 'realtime_elevenlabs' | 'realtime_deepgram';
 export type VoiceQaStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 export type VoiceQaEntryKind = 'system' | 'user' | 'assistant' | 'provider.raw' | 'error';
 
@@ -155,7 +156,7 @@ export const useVoiceQaStore = create<VoiceQaState>((set) => ({
     }),
   appendRealtimeProviderPayload: (payload) =>
     set((state) => {
-      if (state.provider !== 'realtime_elevenlabs') return state;
+      if (!isRealtimeVoiceProviderId(state.provider)) return state;
       const raw = safeStringify(payload);
       const text = extractProviderSummary(payload);
       return appendEntry(state, createEntry('provider.raw', text, raw));

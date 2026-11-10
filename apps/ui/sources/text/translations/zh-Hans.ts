@@ -8840,6 +8840,8 @@ settingsSession: {
     modeDescription:
       "配置语音功能。您可以完全关闭语音、使用 Happier Voice（需要订阅），或使用您自己的 ElevenLabs 账号。",
     mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "通过此服务器进行实时语音对话（网页和 Linux 桌面）",
       off: "关闭",
       offSubtitle: "关闭所有语音功能",
       happier: "Happier Voice",

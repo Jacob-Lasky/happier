@@ -37,7 +37,7 @@ export function createDefaultVoiceQaControllerDeps(): VoiceQaControllerDeps {
         stopRealtime: () => stopRealtimeSession(),
         getRealtimeSession: () => getVoiceSession(),
         getRealtimeBinding: (controlSessionId) =>
-            resolveVoiceSessionBindingByControlSessionId({ controlSessionId, adapterId: 'realtime_elevenlabs' }),
+            resolveVoiceSessionBindingByControlSessionId({ controlSessionId, adapterId: storage.getState().settings.voice.providerId }),
         sendRealtimeTextTurn: async ({ conversationSessionId, text }) => {
             const result = await sendVoiceSessionComposerText({
                 conversationSessionId,

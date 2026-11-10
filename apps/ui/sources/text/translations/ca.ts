@@ -8599,6 +8599,8 @@ settingsSession: {
         modeTitle: 'Veu',
         modeDescription: 'Configura les funcions de veu. Pots desactivar la veu del tot, utilitzar Happier Voice (requereix subscripció) o utilitzar el teu compte d’ElevenLabs.',
         mode: {
+            deepgram: 'Deepgram',
+            deepgramSubtitle: "Veu en temps real a través d’aquest servidor (web i escriptori Linux)",
             off: 'Desactivat',
             offSubtitle: 'Desactiva totes les funcions de veu',
             happier: 'Happier Voice',

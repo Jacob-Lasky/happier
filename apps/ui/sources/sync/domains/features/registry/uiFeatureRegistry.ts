@@ -76,6 +76,7 @@ export const UI_FEATURE_REGISTRY = {
             icon: { ioniconName: 'mic-outline', color: '#34C759' },
         },
     },
+    'voice.deepgram': { settingsToggle: undefined },
     'voice.happierVoice': {
         settingsToggle: undefined,
     },
