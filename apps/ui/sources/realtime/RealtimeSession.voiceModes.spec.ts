@@ -24,8 +24,9 @@ vi.mock('@/utils/platform/microphonePermissions', () => ({
 }));
 
 const fetchHappierVoiceToken = vi.fn();
-const completeHappierVoiceSession = vi.fn(async () => {});
-vi.mock('@/sync/api/voice/apiVoice', () => ({
+const completeHappierVoiceSession = vi.fn(async (_credentials: unknown, _params: { leaseId: string; providerConversationId: string }) => {});
+vi.mock('@/sync/api/voice/apiVoice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/sync/api/voice/apiVoice')>()),
   fetchHappierVoiceToken,
   completeHappierVoiceSession,
 }));
@@ -51,9 +52,10 @@ vi.mock('@/auth/storage/tokenStorage', () => ({
   isLegacyAuthCredentials: (credentials: unknown) => Boolean(credentials),
 }));
 
+let activeServerId = 'server-test';
 vi.mock('@/sync/domains/server/serverRuntime', () => ({
   getActiveServerSnapshot: () => ({
-    serverId: 'server-test',
+    serverId: activeServerId,
     serverUrl: 'http://localhost:9999',
     kind: 'stack',
     generation: 1,
@@ -282,6 +284,135 @@ describe('Realtime voice modes', () => {
       expect(completeHappierVoiceSession).toHaveBeenCalledWith(expect.anything(), { leaseId: 'el_lease', providerConversationId: 'el_request' });
       expect(dg.startSession).toHaveBeenCalled();
       await stopRealtimeSession();
+    });
+
+    it('retries a failed lease completion before minting the next managed session', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const dg = makeVoiceSession('dg_request');
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValue({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      completeHappierVoiceSession.mockRejectedValueOnce(new Error('Voice session complete failed (503)'));
+      await startRealtimeSession('s1');
+      await stopRealtimeSession();
+      expect(completeHappierVoiceSession).toHaveBeenCalledTimes(1);
+      await startRealtimeSession('s1');
+      // The unverified lease still holds the account's concurrency slot; release it before minting again.
+      expect(completeHappierVoiceSession).toHaveBeenNthCalledWith(2, expect.anything(), { leaseId: 'dg_lease', providerConversationId: 'dg_request' });
+      expect(completeHappierVoiceSession.mock.invocationCallOrder[1]).toBeLessThan(fetchHappierVoiceToken.mock.invocationCallOrder[1]);
+      await stopRealtimeSession();
+    });
+
+    it('settles the active call lease when its provider runtime unmounts', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, unregisterVoiceSession, isVoiceSessionStarted } = await import('./RealtimeSession');
+      const dg = makeVoiceSession('dg_request');
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      await startRealtimeSession('s1');
+      await unregisterVoiceSession(dg.session, 'realtime_deepgram');
+      expect(dg.endSession).toHaveBeenCalled();
+      expect(completeHappierVoiceSession).toHaveBeenCalledWith(expect.anything(), { leaseId: 'dg_lease', providerConversationId: 'dg_request' });
+      expect(isVoiceSessionStarted()).toBe(false);
+    });
+
+    it('retries a retained completion only against the server that minted its lease', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      registerVoiceSession(makeVoiceSession('dg_request').session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValue({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      completeHappierVoiceSession.mockRejectedValueOnce(new Error('Voice session complete failed (503)'));
+      try {
+        await startRealtimeSession('s1');
+        await stopRealtimeSession();
+        activeServerId = 'server-other';
+        fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'grant2', leaseId: 'other_lease', expiresAtMs: Date.now() + 60000 });
+        await startRealtimeSession('s1');
+        await stopRealtimeSession();
+        const dgAttempts = () => completeHappierVoiceSession.mock.calls.filter(([, params]) => params.leaseId === 'dg_lease').length;
+        // Only the original failed attempt: the other server never sees this lease.
+        expect(dgAttempts()).toBe(1);
+        activeServerId = 'server-test';
+        await startRealtimeSession('s1');
+        expect(dgAttempts()).toBe(2);
+        await stopRealtimeSession();
+      } finally {
+        activeServerId = 'server-test';
+      }
+    });
+
+    it('shares one teardown between overlapping stops', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const dg = makeVoiceSession('dg_request');
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      await startRealtimeSession('s1');
+      await Promise.all([stopRealtimeSession(), stopRealtimeSession()]);
+      expect(dg.endSession).toHaveBeenCalledTimes(1);
+      expect(completeHappierVoiceSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves an idle runtime unmount to its own teardown without stopping realtime voice', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, unregisterVoiceSession } = await import('./RealtimeSession');
+      const dg = makeVoiceSession('dg_request');
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      state.setRealtimeStatus.mockClear();
+      await unregisterVoiceSession(dg.session, 'realtime_deepgram');
+      expect(dg.endSession).toHaveBeenCalledTimes(1);
+      expect(state.setRealtimeStatus).not.toHaveBeenCalled();
+    });
+
+    it('drops a lease the relay rejected instead of retrying it forever', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const { VoiceSessionCompleteError } = await import('@/sync/api/voice/apiVoice');
+      registerVoiceSession(makeVoiceSession('dg_request').session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValue({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      completeHappierVoiceSession.mockRejectedValueOnce(new VoiceSessionCompleteError(404, 'Voice session complete failed (404)'));
+      await startRealtimeSession('s1');
+      await stopRealtimeSession();
+      await startRealtimeSession('s1');
+      expect(completeHappierVoiceSession).toHaveBeenCalledTimes(1);
+      await stopRealtimeSession();
+    });
+
+    it('completes the lease when Stop lands while the provider is still connecting', async () => {
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const el = makeVoiceSession('unused');
+      const connect = createDeferred<string>();
+      el.session.startSession = async () => connect.promise;
+      registerVoiceSession(el.session);
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'el_token', leaseId: 'el_lease', expiresAtMs: Date.now() + 60000 });
+      const starting = startRealtimeSession('s1');
+      await vi.waitFor(() => expect(fetchHappierVoiceToken).toHaveBeenCalled());
+      const stopping = stopRealtimeSession();
+      connect.resolve('el_late_conversation');
+      await Promise.all([starting, stopping]);
+      await vi.waitFor(() => expect(completeHappierVoiceSession).toHaveBeenCalledWith(expect.anything(), { leaseId: 'el_lease', providerConversationId: 'el_late_conversation' }));
+    });
+
+    it('starts the provider named by the calling adapter rather than re-reading the setting', async () => {
+      const { registerVoiceSession, startRealtimeSession, stopRealtimeSession } = await import('./RealtimeSession');
+      const el = makeVoiceSession('el_request');
+      const dg = makeVoiceSession('dg_request');
+      registerVoiceSession(el.session);
+      registerVoiceSession(dg.session, 'realtime_deepgram');
+      fetchHappierVoiceToken.mockResolvedValueOnce({ allowed: true, token: 'grant', leaseId: 'dg_lease', expiresAtMs: Date.now() + 60000 });
+      await startRealtimeSession('s1', undefined, false, { providerId: 'realtime_deepgram' });
+      expect(dg.startSession).toHaveBeenCalled();
+      expect(el.startSession).not.toHaveBeenCalled();
+      await stopRealtimeSession();
+    });
+
+    it('tells the user when the selected provider has no runtime on this platform', async () => {
+      state.settings.voice.providerId = 'realtime_deepgram';
+      const { registerVoiceSession, startRealtimeSession } = await import('./RealtimeSession');
+      registerVoiceSession(makeVoiceSession('el_request').session);
+      await startRealtimeSession('s1');
+      expect(fetchHappierVoiceToken).not.toHaveBeenCalled();
+      expect(modalAlert).toHaveBeenCalled();
     });
 
     it('does nothing when voice provider is off', async () => {

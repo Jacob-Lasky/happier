@@ -14,13 +14,12 @@ export type DeepgramSessionOptions = {
 const functionCalls = z.object({ functions: z.array(z.object({ id: z.string(), name: z.string(), arguments: z.string(), client_side: z.boolean() })) });
 const cancelledCalls = z.object({ functions: z.array(z.object({ id: z.string() })) });
 
-/** Browser wire contract captured against the live API in packages/tests/fixtures/voice. */
+/** Browser wire contract; DeepgramVoiceSession.test.ts replays the live capture in packages/tests/fixtures/voice. */
 export class DeepgramVoiceSession implements VoiceSession {
   private socket: WebSocket | null = null;
   private keepAlive: ReturnType<typeof setInterval> | null = null;
   private removeAbortListener: (() => void) | null = null;
   private rejectStart: ((error: Error) => void) | null = null;
-  private prompt = '';
   private readonly pendingTools = new Set<string>();
 
   constructor(private readonly options: DeepgramSessionOptions) {}
@@ -29,7 +28,6 @@ export class DeepgramVoiceSession implements VoiceSession {
     await this.endSession();
     if (config.signal?.aborted) return null;
     if (!config.token || !config.leaseId) throw new Error('deepgram_missing_grant_or_lease');
-    this.prompt = z.object({ agent: z.object({ think: z.object({ prompt: z.string() }).optional() }).optional() }).parse(this.options.settings).agent?.think?.prompt ?? '';
     this.options.onStatus('connecting');
     const socket = this.options.createSocket(config.token);
     this.socket = socket;
@@ -137,9 +135,6 @@ export class DeepgramVoiceSession implements VoiceSession {
   }
 
   sendTextMessage(message: string): void { this.send({ type: 'InjectUserMessage', content: message }); }
-  sendContextualUpdate(update: string): void {
-    // UpdatePrompt replaces the system prompt; retain the agent's instructions and earlier context.
-    this.prompt = [this.prompt, update].filter(Boolean).join('\n\n');
-    this.send({ type: 'UpdatePrompt', prompt: this.prompt });
-  }
+  /** Deepgram appends UpdatePrompt to the active prompt (measured live 2026-11-10); resending earlier text duplicates it. */
+  sendContextualUpdate(update: string): void { this.send({ type: 'UpdatePrompt', prompt: update }); }
 }

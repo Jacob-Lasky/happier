@@ -52,13 +52,6 @@ const VoiceUiSchema = z.object({
   updates: VoiceUiUpdatesSchema.prefault({}),
 });
 
-const VoiceRealtimeDeepgramSchema = z.object({
-  assistantLanguage: z.string().nullable().default(null),
-  listenModel: z.string().default('flux-general-en'),
-  thinkModel: z.string().default('gpt-4o-mini'),
-  speakModel: z.string().default('aura-2-thalia-en'),
-});
-
 const VoiceRealtimeElevenLabsSchema = z.object({
   assistantLanguage: z.string().nullable().default(null),
   billingMode: z.enum(['happier', 'byo']).default('happier'),
@@ -280,7 +273,6 @@ export const VoiceSettingsSchema = z.object({
   adapters: z
     .object({
       realtime_elevenlabs: VoiceRealtimeElevenLabsSchema.prefault({}),
-      realtime_deepgram: VoiceRealtimeDeepgramSchema.prefault({}),
       local_direct: VoiceLocalDirectSchema.prefault({}),
       local_conversation: VoiceLocalConversationSchema.prefault({}),
     })
@@ -384,8 +376,6 @@ export function voiceSettingsParse(input: unknown): VoiceSettings {
     const a = raw.adapters as Record<string, unknown>;
     const rt = parseDroppingInvalidFields(VoiceRealtimeElevenLabsSchema, a.realtime_elevenlabs);
     if (rt) base.adapters.realtime_elevenlabs = rt;
-    const dg = parseDroppingInvalidFields(VoiceRealtimeDeepgramSchema, a.realtime_deepgram);
-    if (dg) base.adapters.realtime_deepgram = dg;
     const ld = parseDroppingInvalidFields(VoiceLocalDirectSchema, a.local_direct);
     if (ld) base.adapters.local_direct = ld;
     const lc = parseDroppingInvalidFields(VoiceLocalConversationSchema, a.local_conversation);

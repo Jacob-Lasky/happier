@@ -7,6 +7,7 @@ import {
   stopRealtimeSession,
 } from '@/realtime/RealtimeSession';
 import { storage } from '@/sync/domains/state/storage';
+import type { RealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import type { VoiceAdapterController, VoiceSessionMode, VoiceSessionSnapshot, VoiceSessionStatus } from '@/voice/session/types';
 import { appendVoiceConversationUserText } from '@/voice/sessionBinding/voiceConversationTranscript';
 
@@ -20,8 +21,7 @@ function mapRealtimeMode(mode: unknown): VoiceSessionMode {
   return 'idle';
 }
 
-export function createRealtimeVoiceAdapter(id: "realtime_elevenlabs" | "realtime_deepgram"): VoiceAdapterController {
-
+export function createRealtimeVoiceAdapter(id: RealtimeVoiceProviderId): VoiceAdapterController {
   const getSnapshot = (): VoiceSessionSnapshot => {
     const state = storage.getState();
     const ownsSession = getCurrentRealtimeProviderId() === id;
@@ -39,7 +39,7 @@ export function createRealtimeVoiceAdapter(id: "realtime_elevenlabs" | "realtime
 
   const start = async (opts: Readonly<{ sessionId: string; initialContext?: string }>) => {
     const initialContext = opts.initialContext ?? voiceHooks.onVoiceStarted(opts.sessionId);
-    await startRealtimeSession(opts.sessionId, initialContext);
+    await startRealtimeSession(opts.sessionId, initialContext, false, { providerId: id });
   };
 
   const stop = async (_opts: Readonly<{ sessionId: string }>) => {
@@ -85,7 +85,7 @@ export function createRealtimeVoiceAdapter(id: "realtime_elevenlabs" | "realtime
       localId: opts.localId,
     });
     if (!isVoiceSessionStarted()) {
-      await startRealtimeSession(opts.controlSessionId, undefined, false, { textOnly: true });
+      await startRealtimeSession(opts.controlSessionId, undefined, false, { textOnly: true, providerId: id });
     }
     const activeVoice = getVoiceSession();
     if (!activeVoice) {

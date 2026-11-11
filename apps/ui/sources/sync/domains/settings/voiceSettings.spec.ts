@@ -3,27 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { voiceSettingsDefaults, voiceSettingsParse } from './voiceSettings';
 
 describe('voiceSettings', () => {
-  it('retains a Deepgram provider and its model preferences when parsing synced settings', () => {
-    const parsed = voiceSettingsParse({
-      providerId: 'realtime_deepgram',
-      adapters: {
-        realtime_deepgram: {
-          assistantLanguage: 'en',
-          listenModel: 'flux-general-en',
-          thinkModel: 'gpt-4o-mini',
-          speakModel: 'aura-2-thalia-en',
-        },
-      },
-    });
+  it('retains a Deepgram provider choice when parsing synced settings', () => {
+    const parsed = voiceSettingsParse({ providerId: 'realtime_deepgram' });
     expect(parsed.providerId).toBe('realtime_deepgram');
-    expect(parsed.adapters).toMatchObject({
-      realtime_deepgram: {
-        assistantLanguage: 'en',
-        listenModel: 'flux-general-en',
-        thinkModel: 'gpt-4o-mini',
-        speakModel: 'aura-2-thalia-en',
-      },
-    });
     expect(parsed.privacy.shareToolArgs).toBe(false);
     expect(parsed.adapters.realtime_elevenlabs.billingMode).toBe('happier');
   });

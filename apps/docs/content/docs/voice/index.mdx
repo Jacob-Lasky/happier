@@ -126,11 +126,13 @@ This background-call behavior applies to the realtime ElevenLabs path, not to Lo
 
 Web and Linux desktop development builds can use a server-managed Deepgram Voice Agent. Mobile support is a later phase. This option is shown only when the server advertises `voice.deepgram` as enabled.
 
-Set `DEEPGRAM_API_KEY` on the relay server. The key needs permission to grant temporary tokens and read request usage. If that key can access multiple projects, also set `DEEPGRAM_PROJECT_ID` so completed calls can be verified. Existing voice subscription, quota, concurrency, and session-duration controls apply to both managed providers.
+Set `DEEPGRAM_API_KEY` on the relay server. The key needs permission to grant temporary tokens and read request usage. If that key can access multiple projects, also set `DEEPGRAM_PROJECT_ID` so completed calls can be verified. Voice subscription and quota checks gate every Deepgram grant, the same as for ElevenLabs.
 
-Choose **Deepgram** in **Settings → Voice**, then start voice from a session or the global voice surface. On Linux desktop, allow microphone access in the native permission dialog when starting a spoken conversation. The server issues a temporary grant; the browser connects directly to Deepgram. Coding actions use Happier's existing action permissions and privacy controls. Speaking while the assistant talks interrupts playback, and cancelled tool calls cannot send late results back to the agent.
+Choose **Deepgram** in **Settings → Voice**, then start voice from a session or the global voice surface. The Deepgram option uses English speech and voice models, whatever the assistant-language preference. On Linux desktop, allow microphone access in the native permission dialog the first time a spoken conversation starts; the choice is remembered until the app quits. The server issues a short-lived grant; the browser connects directly to Deepgram. Coding actions use Happier's existing action permissions and privacy controls. Speaking while the assistant talks interrupts playback, and cancelled tool calls cannot send late results back to the agent.
 
-Stopping a call reports its request ID to the relay. The relay verifies Deepgram's request metadata and lease tag, records the measured duration, and releases the concurrency slot. If verification fails, completion is reported as an error and the lease remains reserved until expiry.
+Stopping a call, switching away from Deepgram, or the call ending on its own reports its request ID to the relay. The relay waits for Deepgram to finalize the request, verifies its metadata and lease tag, records the measured duration, and releases the concurrency slot. If verification fails transiently, the app retries before the next call starts. A call whose app closes before it reports completion, or that fails before Deepgram assigns a request ID, keeps its slot until the lease expires (`VOICE_MAX_SESSION_SECONDS`).
+
+Because the browser holds the Deepgram connection, the concurrency limit and session duration are enforced by the Happier app, not by the relay. A modified client could keep a call open past its lease or open extra calls with one grant, billed to the relay's Deepgram account. Keep this option to trusted users while it is experimental.
 
 ## Use my ElevenLabs
 

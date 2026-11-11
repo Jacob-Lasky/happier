@@ -2,8 +2,9 @@ import { useEffect } from 'react';
 import { buildRealtimeVoiceAgentPrompt } from '@happier-dev/agents';
 import type { VoiceSession, VoiceSessionConfig } from './types';
 import { DeepgramVoiceSession } from './deepgram/DeepgramVoiceSession';
+import { buildDeepgramAgentSettings } from './deepgram/deepgramAgentSettings';
 import { createDeepgramAudio } from './deepgram/deepgramAudio.web';
-import { registerVoiceSession, setCurrentRealtimeControlSessionId, stopRealtimeSession } from './RealtimeSession';
+import { registerVoiceSession, setCurrentRealtimeControlSessionId, stopRealtimeSession, unregisterVoiceSession } from './RealtimeSession';
 import { resolveRequiredVoiceClientTools } from './requiredClientTools';
 import { realtimeClientTools } from './realtimeClientTools';
 import { storage } from '@/sync/domains/state/storage';
@@ -19,25 +20,17 @@ class WebDeepgramVoiceSession implements VoiceSession {
   async startSession(config: VoiceSessionConfig): Promise<string | null> {
     await this.endSession();
     const state = storage.getState();
-    const settings = state.settings.voice.adapters.realtime_deepgram;
     const functions = resolveRequiredVoiceClientTools(state);
     setCurrentRealtimeControlSessionId(config.sessionId);
     const runtime = new DeepgramVoiceSession({
+      // Only the bearer subprotocol on /v1/agent/converse opened from a browser (probed live 2026-11-10;
+      // the bare host and the `token` query parameter were refused).
       createSocket: token => new WebSocket('wss://agent.deepgram.com/v1/agent/converse', ['bearer', token]),
       audio: createDeepgramAudio(speaking => storage.getState().setRealtimeMode(speaking ? 'speaking' : 'idle', true)),
-      settings: {
-        audio: { input: { encoding: 'linear16', sample_rate: 16000 }, output: { encoding: 'linear16', sample_rate: 24000, container: 'none' } },
-        agent: {
-          language: settings.assistantLanguage ?? state.settings.voice.assistantLanguage ?? 'en',
-          listen: { provider: { type: 'deepgram', version: 'v2', model: settings.listenModel } },
-          think: {
-            provider: { type: 'open_ai', model: settings.thinkModel },
-            prompt: buildRealtimeVoiceAgentPrompt({ initialConversationContextPlaceholder: config.initialContext ?? '', sessionIdPlaceholder: config.sessionId, disabledActionIds: resolveDisabledVoiceActionIdsFromState(state) }),
-            functions,
-          },
-          speak: { provider: { type: 'deepgram', model: settings.speakModel } },
-        },
-      },
+      settings: buildDeepgramAgentSettings({
+        prompt: buildRealtimeVoiceAgentPrompt({ initialConversationContextPlaceholder: config.initialContext ?? '', sessionIdPlaceholder: config.sessionId, disabledActionIds: resolveDisabledVoiceActionIdsFromState(state) }),
+        functions,
+      }),
       tools: Object.fromEntries(functions.filter(tool => typeof realtimeClientTools[tool.name] === 'function').map(tool => [tool.name, realtimeClientTools[tool.name]])),
       onStatus: status => {
         storage.getState().setRealtimeStatus(status);
@@ -77,7 +70,8 @@ export function RealtimeDeepgramVoiceSession() {
   useEffect(() => {
     const session = new WebDeepgramVoiceSession();
     registerVoiceSession(session, 'realtime_deepgram');
-    return () => { void session.endSession(); };
+    // Unmount must settle an active call's lease, not just close its socket.
+    return () => { void unregisterVoiceSession(session, 'realtime_deepgram'); };
   }, []);
   return null;
 }

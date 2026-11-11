@@ -70,7 +70,7 @@ describe('realtime elevenlabs voice adapter', () => {
     await adapter.toggle({ sessionId: 's1' });
 
     expect(onVoiceStarted).toHaveBeenCalledWith('s1');
-    expect(startRealtimeSession).toHaveBeenCalledWith('s1', 'initial-context');
+    expect(startRealtimeSession).toHaveBeenCalledWith('s1', 'initial-context', false, { providerId: 'realtime_elevenlabs' });
   });
 
   it('stops when connected', async () => {
@@ -130,7 +130,7 @@ describe('realtime elevenlabs voice adapter', () => {
       handoffMode: 'interrupt_and_send',
     });
 
-    expect(startRealtimeSession).toHaveBeenCalledWith('voice-global', undefined, false, { textOnly: true });
+    expect(startRealtimeSession).toHaveBeenCalledWith('voice-global', undefined, false, { textOnly: true, providerId: 'realtime_elevenlabs' });
     expect(appendVoiceConversationUserText).toHaveBeenCalledWith({
       conversationSessionId: 'carrier-s1',
       text: 'hello',
@@ -159,7 +159,7 @@ describe('realtime elevenlabs voice adapter', () => {
       handoffMode: 'interrupt_and_send',
     })).rejects.toThrow('voice_service_unavailable');
 
-    expect(startRealtimeSession).toHaveBeenCalledWith('voice-global', undefined, false, { textOnly: true });
+    expect(startRealtimeSession).toHaveBeenCalledWith('voice-global', undefined, false, { textOnly: true, providerId: 'realtime_elevenlabs' });
     expect(sendTextMessage).not.toHaveBeenCalled();
   });
 });

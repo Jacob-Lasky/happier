@@ -84,6 +84,14 @@ export async function fetchHappierVoiceToken(
     throw new Error(`Voice token request failed: ${response.status}`);
 }
 
+/** The relay answered; `status` separates a rejected lease (404) from a retryable failure. */
+export class VoiceSessionCompleteError extends Error {
+    constructor(readonly status: number, message: string) {
+        super(message);
+        this.name = 'VoiceSessionCompleteError';
+    }
+}
+
 export async function completeHappierVoiceSession(
     credentials: AuthCredentials,
     params: { leaseId: string; providerConversationId: string },
@@ -114,7 +122,7 @@ export async function completeHappierVoiceSession(
             }
 
             const suffix = bodyText ? `: ${bodyText.slice(0, 300)}` : '';
-            throw new Error(`Voice session complete failed (${response.status})${suffix}`);
+            throw new VoiceSessionCompleteError(response.status, `Voice session complete failed (${response.status})${suffix}`);
         }
     } finally {
         clearTimeout(timer);

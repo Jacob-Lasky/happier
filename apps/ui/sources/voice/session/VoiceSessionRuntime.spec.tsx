@@ -181,4 +181,37 @@ describe('VoiceSessionRuntime', () => {
 
     expect(getVoiceSessionSnapshot()).toEqual(snapB);
   });
+
+  it('stops an active call when the selected provider changes away from it', async () => {
+    let providerId = 'realtime_deepgram';
+    useSetting.mockImplementation((key: string) => (key === 'voice' ? { providerId } : null));
+    const active: Snapshot = { adapterId: 'realtime_deepgram', sessionId: null, status: 'connected', mode: 'idle', canStop: true };
+    const stop = vi.fn(async () => {});
+    vi.doMock('@/voice/adapters/registerBuiltinVoiceAdapters', () => ({
+      createBuiltinVoiceAdapters: () => [{
+        id: 'realtime_deepgram',
+        start: vi.fn(async () => {}),
+        stop,
+        toggle: vi.fn(async () => {}),
+        interrupt: vi.fn(async () => {}),
+        sendContextUpdate: vi.fn(() => {}),
+        getSnapshot: () => active,
+        subscribe: () => () => {},
+      }],
+    }));
+    const { VoiceSessionRuntime } = await import('./VoiceSessionRuntime');
+    let rerender: () => void = () => {};
+    function Harness() {
+      const [, setTick] = React.useState(0);
+      rerender = () => setTick((tick) => tick + 1);
+      return React.createElement(VoiceSessionRuntime);
+    }
+    await renderScreen(React.createElement(Harness));
+    expect(stop).not.toHaveBeenCalled();
+
+    providerId = 'off';
+    await act(async () => { rerender(); });
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
 });

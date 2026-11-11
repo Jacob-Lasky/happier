@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Platform } from 'react-native';
-import { useFeatureDecision } from '@/hooks/server/useFeatureDecision';
+import { useHappierVoiceSupport } from '@/hooks/server/useHappierVoiceSupport';
 
 import { useUnistyles } from 'react-native-unistyles';
 
@@ -16,7 +16,8 @@ export function VoiceProviderSection(props: {
   happierVoiceSupported: boolean;
 }) {
   const { theme } = useUnistyles();
-  const deepgramDecision = useFeatureDecision("voice.deepgram");
+  // Same runtime-scoped decision owner the navigation gate uses, so the picker and gate cannot disagree.
+  const deepgramSupported = useHappierVoiceSupport('realtime_deepgram') === true;
   const select = (next: VoiceSettings) => props.setVoice(next);
 
   const billingMode = props.voice.adapters.realtime_elevenlabs.billingMode;
@@ -54,7 +55,7 @@ export function VoiceProviderSection(props: {
         />
       )}
 
-      {Platform.OS === 'web' && deepgramDecision?.state === 'enabled' ? (
+      {Platform.OS === 'web' && deepgramSupported ? (
         <Item
           title={t('settingsVoice.mode.deepgram')}
           subtitle={t('settingsVoice.mode.deepgramSubtitle')}

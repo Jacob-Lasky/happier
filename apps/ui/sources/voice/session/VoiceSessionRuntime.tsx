@@ -37,6 +37,24 @@ export function VoiceSessionRuntime(): React.ReactElement | null {
     };
   }, [providerId]);
 
+  // A call never outlives its provider selection: once another provider (or Off) is chosen, the
+  // surface that could stop it is gone, so the runtime ends it and the adapter settles its lease.
+  const previousProviderIdRef = React.useRef(providerId);
+  React.useEffect(() => {
+    if (!registered || previousProviderIdRef.current === providerId) return;
+    previousProviderIdRef.current = providerId;
+    // Stop only the first active adapter: both local adapters report the one shared local engine.
+    const active = getVoiceAdapterRegistry().list().find((adapter) => {
+      if (adapter.id === providerId) return false;
+      const status = adapter.getSnapshot().status;
+      return status === 'connected' || status === 'connecting';
+    });
+    if (!active) return;
+    void active.stop({ sessionId: active.getSnapshot().sessionId ?? '' }).catch((error: unknown) => {
+      console.warn('Failed to stop voice after provider change:', { adapterId: active.id, error });
+    });
+  }, [providerId, registered]);
+
   const publishSnapshot = React.useCallback(() => {
     setVoiceSessionSnapshot(computeSnapshot());
   }, [computeSnapshot]);

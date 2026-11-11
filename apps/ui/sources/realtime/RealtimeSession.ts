@@ -1,7 +1,8 @@
 import { isRealtimeVoiceProviderId, type RealtimeVoiceProviderId } from '@/sync/domains/settings/voiceSettings';
 import type { VoiceSession } from './types';
-import { completeHappierVoiceSession, fetchHappierVoiceToken } from '@/sync/api/voice/apiVoice';
+import { completeHappierVoiceSession, fetchHappierVoiceToken, VoiceSessionCompleteError } from '@/sync/api/voice/apiVoice';
 import { storage } from '@/sync/domains/state/storage';
+import { getActiveServerSnapshot } from '@/sync/domains/server/serverRuntime';
 import { sync } from '@/sync/sync';
 import { Modal } from '@/modal';
 import { TokenStorage } from '@/auth/storage/tokenStorage';
@@ -23,6 +24,7 @@ let voiceSessionStarted: boolean = false;
 let startInFlight: Promise<void> | null = null;
 let startInFlightAbortController: AbortController | null = null;
 let currentLeaseId: string | null = null;
+let currentLeaseOwner: ManagedLeaseOwner | null = null;
 let currentProviderConversationId: string | null = null;
 let currentBilledMode: 'happier' | 'byo' | null = null;
 let currentControlSessionId: string | null = null;
@@ -131,13 +133,15 @@ export async function startRealtimeSession(
     sessionId: string,
     initialContext?: string,
     retryAfterPaywall = false,
-    options?: Readonly<{ textOnly?: boolean }>,
+    options?: Readonly<{ textOnly?: boolean; providerId?: RealtimeProviderId }>,
 ) {
-    const selectedProviderId = storage.getState().settings.voice.providerId;
+    // The calling adapter names its provider; callers without one (QA) use the saved selection.
+    const selectedProviderId = options?.providerId ?? storage.getState().settings.voice.providerId;
     if (!isRealtimeVoiceProviderId(selectedProviderId)) return;
     const session = voiceSessions.get(selectedProviderId);
     if (!session) {
-        console.warn('No voice session registered');
+        // Synced settings can select a provider this platform has no runtime for (Deepgram is web-only).
+        Modal.alert(t('common.error'), t('errors.voiceServiceUnavailable'));
         return;
     }
 
@@ -154,10 +158,6 @@ export async function startRealtimeSession(
     }
 
     const settings: any = storage.getState().settings;
-    const providerId = settings?.voice?.providerId ?? 'off';
-    if (providerId !== 'realtime_elevenlabs' && providerId !== 'realtime_deepgram') {
-        return;
-    }
 
     // Realtime voice is account-scoped: if a start is already in-flight, dedupe and await it.
     if (startInFlight) {
@@ -254,6 +254,8 @@ export async function startRealtimeSession(
             }
 
             // Happier Voice: always use authenticated server-minted conversation tokens.
+            // An unverified earlier lease still holds the account's concurrency slot; release it first.
+            await flushManagedVoiceCompletions();
             const credentials = await TokenStorage.getCredentials();
             if (!credentials) {
                 Modal.alert(t('common.error'), t('errors.authenticationFailed'));
@@ -269,7 +271,9 @@ export async function startRealtimeSession(
                 });
                 if (abortController.signal.aborted) return;
                 if (response.allowed) {
+                    const leaseOwner = resolveManagedLeaseOwner();
                     currentLeaseId = response.leaseId;
+                    currentLeaseOwner = leaseOwner;
                     currentBilledMode = 'happier';
                     currentControlSessionId = controlSessionId;
                     await enableVoiceBackgroundCallAudioMode();
@@ -294,11 +298,15 @@ export async function startRealtimeSession(
                         } catch {
                             // best-effort cleanup
                         }
+                        // Stop raced the connect: the provider call exists, so its lease must still be completed.
+                        retainManagedVoiceCompletion(response.leaseId, conversationId, leaseOwner);
+                        void flushManagedVoiceCompletions();
                         await disableVoiceBackgroundCallAudioMode();
                         return;
                     }
                     currentProviderConversationId = conversationId;
                     currentLeaseId = response.leaseId;
+                    currentLeaseOwner = leaseOwner;
                     currentBilledMode = 'happier';
                     currentControlSessionId = controlSessionId;
                     voiceSessionStarted = true;
@@ -337,10 +345,9 @@ export async function startRealtimeSession(
             }
             console.error('Failed to start realtime session:', error);
             await session.endSession().catch(() => {});
-            await completeCurrentManagedVoiceSession();
+            retainCurrentManagedVoiceCompletion();
+            await flushManagedVoiceCompletions();
             voiceSessionStarted = false;
-            currentProviderConversationId = null;
-            currentLeaseId = null;
             currentBilledMode = null;
             currentControlSessionId = null;
             Modal.alert(t('common.error'), t('errors.voiceServiceUnavailable'));
@@ -359,28 +366,78 @@ export async function startRealtimeSession(
     }
 }
 
-async function completeCurrentManagedVoiceSession(): Promise<void> {
-        if (currentBilledMode === 'happier' && currentLeaseId && currentProviderConversationId) {
-            const credentials = await TokenStorage.getCredentials();
-            if (credentials) {
-                try {
-                    await completeHappierVoiceSession(credentials, {
-                        leaseId: currentLeaseId,
-                        providerConversationId: currentProviderConversationId,
-                    });
-                } catch (error) {
-                    console.warn('Failed to complete Happier voice session:', {
-                        leaseId: currentLeaseId,
-                        providerConversationId: currentProviderConversationId,
-                        error,
-                    });
-                }
-            }
-        }
+type ManagedLeaseOwner = Readonly<{ serverId: string; accountId: string }>;
+type PendingManagedCompletion = ManagedLeaseOwner & Readonly<{ providerConversationId: string }>;
 
+/** Managed leases whose provider usage is not yet verified, keyed by lease id. */
+const pendingManagedCompletions = new Map<string, PendingManagedCompletion>();
+let managedCompletionFlight: Promise<void> | null = null;
+
+/** The server and account a lease was minted on; only they can verify it. */
+function resolveManagedLeaseOwner(): ManagedLeaseOwner {
+    return { serverId: getActiveServerSnapshot().serverId, accountId: storage.getState().profile?.id ?? '' };
 }
 
-export async function stopRealtimeSession() {
+function retainManagedVoiceCompletion(leaseId: string, providerConversationId: string, owner: ManagedLeaseOwner): void {
+    pendingManagedCompletions.set(leaseId, { ...owner, providerConversationId });
+}
+
+/** Moves the active managed lease into the pending set so later awaits cannot see or reuse it. */
+function retainCurrentManagedVoiceCompletion(): void {
+    if (currentBilledMode === 'happier' && currentLeaseId && currentProviderConversationId && currentLeaseOwner) {
+        retainManagedVoiceCompletion(currentLeaseId, currentProviderConversationId, currentLeaseOwner);
+    }
+    currentLeaseId = null;
+    currentLeaseOwner = null;
+    currentProviderConversationId = null;
+}
+
+/**
+ * Completes pending managed leases owned by the active server and account (single flight). A
+ * lease retained while the flight runs is picked up by the same flight, so a caller awaiting it
+ * never mints past one. A lease the server could not verify stays pending and is retried before
+ * the next mint, because it holds the account's concurrency slot until verified or expired. A
+ * rejected lease (404) is dropped: retrying cannot change it. Leases of another server or account
+ * wait until that owner is active again; sending them elsewhere would read as a rejection.
+ */
+function flushManagedVoiceCompletions(): Promise<void> {
+    if (managedCompletionFlight) return managedCompletionFlight;
+    if (pendingManagedCompletions.size === 0) return Promise.resolve();
+    const flight = (async () => {
+        const attempted = new Set<string>();
+        for (;;) {
+            const owner = resolveManagedLeaseOwner();
+            const next = [...pendingManagedCompletions].find(([leaseId, pending]) => (
+                !attempted.has(leaseId) && pending.serverId === owner.serverId && pending.accountId === owner.accountId
+            ));
+            if (!next) return;
+            const [leaseId, { providerConversationId }] = next;
+            attempted.add(leaseId);
+            const credentials = await TokenStorage.getCredentials();
+            if (!credentials) return;
+            try {
+                await completeHappierVoiceSession(credentials, { leaseId, providerConversationId });
+                pendingManagedCompletions.delete(leaseId);
+            } catch (error) {
+                const rejected = error instanceof VoiceSessionCompleteError && error.status === 404;
+                if (rejected) pendingManagedCompletions.delete(leaseId);
+                console.warn('Failed to complete Happier voice session:', { leaseId, providerConversationId, retained: !rejected, error });
+            }
+        }
+    })();
+    managedCompletionFlight = flight.finally(() => { managedCompletionFlight = null; });
+    return managedCompletionFlight;
+}
+
+let stopInFlight: Promise<void> | null = null;
+
+/** Single flight: overlapping stops (user, provider change, unmount, lease expiry) share one teardown. */
+export function stopRealtimeSession(): Promise<void> {
+    stopInFlight ??= runStopRealtimeSession().finally(() => { stopInFlight = null; });
+    return stopInFlight;
+}
+
+async function runStopRealtimeSession(): Promise<void> {
     if (!voiceSession) {
         resetRealtimeUiState();
         return;
@@ -401,13 +458,12 @@ export async function stopRealtimeSession() {
         }
         await voiceSession.endSession();
 
-        await completeCurrentManagedVoiceSession();
+        retainCurrentManagedVoiceCompletion();
+        await flushManagedVoiceCompletions();
 
         voiceSessionStarted = false;
         latestRequestedTargetSessionId = null;
-        currentLeaseId = null;
         currentLeaseExpiresAtMs = null;
-        currentProviderConversationId = null;
         currentBilledMode = null;
         currentControlSessionId = null;
     } catch (error) {
@@ -421,6 +477,18 @@ export async function stopRealtimeSession() {
 export function registerVoiceSession(session: VoiceSession, providerId: RealtimeProviderId = "realtime_elevenlabs") {
     voiceSessions.set(providerId, session);
     if (!voiceSession || (!voiceSessionStarted && !startInFlight && providerId === storage.getState().settings.voice.providerId)) voiceSession = session;
+}
+
+/** Unmount path for a provider runtime: settle its active call through the finalizer, then forget the runtime. */
+export async function unregisterVoiceSession(session: VoiceSession, providerId: RealtimeProviderId): Promise<void> {
+    if (voiceSessions.get(providerId) === session) voiceSessions.delete(providerId);
+    if (voiceSession === session && (voiceSessionStarted || startInFlight)) {
+        await stopRealtimeSession();
+    } else {
+        await session.endSession();
+    }
+    // A remounted runtime may have taken over while this one stopped; release only our own pointer.
+    if (voiceSession === session) voiceSession = null;
 }
 
 export function isVoiceSessionStarted(): boolean {
