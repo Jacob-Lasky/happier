@@ -3,17 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStorageModuleStub } from '@/dev/testkit/mocks/storage';
 import { resetRuntimeFetch } from '@/utils/system/runtimeFetch';
 import { installRealtimeCommonModuleMocks } from '../realtimeTestHelpers';
+import { resolveRequiredVoiceClientTools } from '../requiredClientTools';
 
 vi.mock('react-native-reanimated', () => ({}));
 vi.mock('react-native-typography', () => ({ iOSUIKit: { title3: {} } }));
-vi.mock('@happier-dev/agents', () => ({
-  buildElevenLabsVoiceAgentPrompt: vi.fn(
-    () => 'Claude Code prompt with {{initialConversationContext}} and {{sessionId}}',
-  ),
-}));
-vi.mock('@/voice/tools/resolveDisabledVoiceActionIds', () => ({
-  resolveDisabledVoiceActionIdsFromState: vi.fn(() => []),
-}));
 
 installRealtimeCommonModuleMocks({
   storage: () =>
@@ -24,37 +17,9 @@ installRealtimeCommonModuleMocks({
     }),
 });
 
-const REQUIRED_CLIENT_TOOL_SPECS = [
-  {
-    name: 'startReview',
-    description: 'Start a review for the active session.',
-    parameters: {
-      type: 'object',
-      description: 'Parameters',
-      properties: {
-        sessionId: { type: 'string', description: 'Session id' },
-        engineIds: {
-          type: 'array',
-          description: 'Review engines',
-          items: { type: 'string', description: 'Engine id' },
-        },
-      },
-      required: ['sessionId'],
-    },
-  },
-  {
-    name: 'spawnSessionPicker',
-    description: 'Open the session picker.',
-    parameters: {
-      type: 'object',
-      description: 'Parameters',
-      properties: {
-        sessionId: { type: 'string', description: 'Session id' },
-      },
-      required: ['sessionId'],
-    },
-  },
-] as const;
+// The real resolver over the same empty settings the storage stub serves.
+const REQUIRED_CLIENT_TOOL_SPECS = resolveRequiredVoiceClientTools({ settings: {} });
+if (REQUIRED_CLIENT_TOOL_SPECS.length === 0) throw new Error('expected the real voice tool catalog to be non-empty');
 
 const EXPECTED_CLIENT_EVENTS = [
   'audio',
@@ -69,9 +34,6 @@ const EXPECTED_CLIENT_EVENTS = [
   'guardrail_triggered',
 ] as const;
 
-vi.mock('./requiredClientTools', () => ({
-  resolveElevenLabsRequiredClientTools: vi.fn(() => REQUIRED_CLIENT_TOOL_SPECS),
-}));
 
 describe('ElevenLabs BYO autoprov', () => {
   const originalFetch = globalThis.fetch;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { actionSpecToElevenLabsClientToolParameters } from './actionInputElevenLabsToolSchema.js';
+import { actionSpecToVoiceClientToolParameters } from './actionInputVoiceToolSchema.js';
 import { getActionSpec } from './actionSpecs.js';
 
 function hasKeyDeep(value: unknown, key: string): boolean {
@@ -11,11 +11,11 @@ function hasKeyDeep(value: unknown, key: string): boolean {
   return Object.values(record).some((v) => hasKeyDeep(v, key));
 }
 
-describe('actionInputElevenLabsToolSchema', () => {
+describe('actionInputVoiceToolSchema', () => {
   it('produces an ElevenLabs-compatible parameters schema for review.start', () => {
     const spec = getActionSpec('review.start');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec);
+    const schema = actionSpecToVoiceClientToolParameters(spec);
 
     expect(schema).toMatchObject({
       type: 'object',
@@ -47,7 +47,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('produces an ElevenLabs-compatible parameters schema for session.user_action.answer', () => {
     const spec = getActionSpec('session.user_action.answer');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec);
+    const schema = actionSpecToVoiceClientToolParameters(spec);
 
     expect(schema).toMatchObject({
       type: 'object',
@@ -69,7 +69,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('omits guidance for disabled discovery tools from parameter descriptions', () => {
     const spec = getActionSpec('session.spawn_new');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec, {
+    const schema = actionSpecToVoiceClientToolParameters(spec, {
       disabledActionIds: ['machines.list'],
     });
 
@@ -80,7 +80,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('omits guidance for discovery tools that are not exposed in the available surface', () => {
     const spec = getActionSpec('session.spawn_new');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec, {
+    const schema = actionSpecToVoiceClientToolParameters(spec, {
       availableActionIds: ['session.spawn_picker', 'agents.backends.list', 'agents.models.list'],
     });
 
@@ -93,7 +93,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('describes backendTargetKey for configured ACP model discovery', () => {
     const spec = getActionSpec('agents.models.list');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec, {
+    const schema = actionSpecToVoiceClientToolParameters(spec, {
       availableActionIds: ['agents.backends.list', 'agents.models.list'],
     });
 
@@ -104,7 +104,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('keeps the customAcp backendTargetKey requirement even when backend discovery is unavailable', () => {
     const spec = getActionSpec('agents.models.list');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec, {
+    const schema = actionSpecToVoiceClientToolParameters(spec, {
       availableActionIds: ['agents.models.list'],
     });
 
@@ -115,7 +115,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('omits discovery guidance when the available action set is explicitly empty', () => {
     const spec = getActionSpec('agents.models.list');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec, {
+    const schema = actionSpecToVoiceClientToolParameters(spec, {
       availableActionIds: [],
     });
 
@@ -126,7 +126,7 @@ describe('actionInputElevenLabsToolSchema', () => {
   it('drops non-string enums that ElevenLabs rejects on numeric parameters', () => {
     const spec = getActionSpec('memory.search');
 
-    const schema = actionSpecToElevenLabsClientToolParameters(spec);
+    const schema = actionSpecToVoiceClientToolParameters(spec);
 
     expect((schema as any).properties?.query?.properties?.v).toMatchObject({
       type: 'number',

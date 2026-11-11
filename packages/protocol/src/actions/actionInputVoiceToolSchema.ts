@@ -244,6 +244,3 @@ export function actionSpecToVoiceClientToolParameters(
     ...(required.length > 0 ? { required } : {}),
   } as JsonSchemaObject;
 }
-
-// Compatibility name for existing ElevenLabs provisioning consumers.
-export const actionSpecToElevenLabsClientToolParameters = actionSpecToVoiceClientToolParameters;

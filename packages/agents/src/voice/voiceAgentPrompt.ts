@@ -212,6 +212,3 @@ export function buildLocalVoiceAgentSystemPrompt(params?: Readonly<{
     }),
   }));
 }
-
-// Existing provisioning callers use the same realtime prompt.
-export const buildElevenLabsVoiceAgentPrompt = buildRealtimeVoiceAgentPrompt;

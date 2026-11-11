@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-describe('resolveElevenLabsRequiredClientTools', () => {
+describe('resolveRequiredVoiceClientTools', () => {
     it('omits disabled actions', async () => {
-        const { resolveElevenLabsRequiredClientTools } = await import('./requiredClientTools');
+        const { resolveRequiredVoiceClientTools } = await import('./requiredClientTools');
 
         const state: any = {
             settings: {
@@ -19,12 +19,12 @@ describe('resolveElevenLabsRequiredClientTools', () => {
             },
         };
 
-        const tools = resolveElevenLabsRequiredClientTools(state);
+        const tools = resolveRequiredVoiceClientTools(state);
         expect(tools.some((t) => t.name === 'sendSessionMessage')).toBe(false);
     });
 
     it('omits discovery guidance for unavailable tools from parameter descriptions', async () => {
-        const { resolveElevenLabsRequiredClientTools } = await import('./requiredClientTools');
+        const { resolveRequiredVoiceClientTools } = await import('./requiredClientTools');
 
         const state: any = {
             settings: {
@@ -36,7 +36,7 @@ describe('resolveElevenLabsRequiredClientTools', () => {
             },
         };
 
-        const tools = resolveElevenLabsRequiredClientTools(state);
+        const tools = resolveRequiredVoiceClientTools(state);
         const spawnSession = tools.find((t) => t.name === 'spawnSession');
         expect(spawnSession).toBeTruthy();
         expect(String((spawnSession as any)?.parameters?.properties?.host?.description ?? '')).not.toContain('listMachines');
@@ -44,9 +44,9 @@ describe('resolveElevenLabsRequiredClientTools', () => {
     });
 
     it('uses the richer action input guidance as the tool description when available', async () => {
-        const { resolveElevenLabsRequiredClientTools } = await import('./requiredClientTools');
+        const { resolveRequiredVoiceClientTools } = await import('./requiredClientTools');
 
-        const tools = resolveElevenLabsRequiredClientTools({});
+        const tools = resolveRequiredVoiceClientTools({});
         const spawnSession = tools.find((tool) => tool.name === 'spawnSession');
 
         expect(spawnSession).toBeTruthy();

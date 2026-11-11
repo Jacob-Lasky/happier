@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { listVoiceActionBlockSpecs, listVoiceToolActionSpecs } from '@happier-dev/protocol';
 
-import { buildElevenLabsVoiceAgentPrompt, buildLocalVoiceAgentSystemPrompt } from './voiceAgentPrompt.js';
+import { buildRealtimeVoiceAgentPrompt, buildLocalVoiceAgentSystemPrompt } from './voiceAgentPrompt.js';
 
 describe('voiceAgentPrompt', () => {
   it('prioritizes discovery and hot-path tools in the ElevenLabs prompt instead of inlining the full catalog', () => {
-    const prompt = buildElevenLabsVoiceAgentPrompt({
+    const prompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -21,7 +21,7 @@ describe('voiceAgentPrompt', () => {
   });
 
   it('omits disabled voice tool action specs in the ElevenLabs prompt', () => {
-    const prompt = buildElevenLabsVoiceAgentPrompt({
+    const prompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
       disabledActionIds: ['review.start'],
@@ -84,7 +84,7 @@ describe('voiceAgentPrompt', () => {
   });
 
   it('includes the same discovery guidance in the ElevenLabs voice prompt', () => {
-    const prompt = buildElevenLabsVoiceAgentPrompt({
+    const prompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -131,7 +131,7 @@ describe('voiceAgentPrompt', () => {
       sessionId: 's1',
       extraSystemAppendBlocks: ['Voice stack block'],
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
       extraSystemAppendBlocks: ['Voice stack block'],
@@ -148,7 +148,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -173,7 +173,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -195,7 +195,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -209,7 +209,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -226,7 +226,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -242,7 +242,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -259,7 +259,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });
@@ -281,7 +281,7 @@ describe('voiceAgentPrompt', () => {
       actionsTag: 'voice_actions',
       sessionId: 's1',
     });
-    const elevenLabsPrompt = buildElevenLabsVoiceAgentPrompt({
+    const elevenLabsPrompt = buildRealtimeVoiceAgentPrompt({
       initialConversationContextPlaceholder: '{{initialConversationContext}}',
       sessionIdPlaceholder: '{{sessionId}}',
     });

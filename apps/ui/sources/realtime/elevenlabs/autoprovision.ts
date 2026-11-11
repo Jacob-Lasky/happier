@@ -1,8 +1,8 @@
 import { elevenLabsFetchJson } from './elevenLabsApi';
-import { buildElevenLabsVoiceAgentPrompt } from '@happier-dev/agents';
+import { buildRealtimeVoiceAgentPrompt } from '@happier-dev/agents';
 import { DEFAULT_ELEVENLABS_VOICE_ID } from './defaults';
 import { storage } from '@/sync/domains/state/storage';
-import { resolveElevenLabsRequiredClientTools } from './requiredClientTools';
+import { resolveRequiredVoiceClientTools } from '../requiredClientTools';
 import { resolveDisabledVoiceActionIdsFromState } from '@/voice/tools/resolveDisabledVoiceActionIds';
 import { listElevenLabsVoices } from './elevenLabsVoices';
 import { selectPreferredElevenLabsVoiceId } from './selectPreferredElevenLabsVoiceId';
@@ -321,11 +321,11 @@ async function ensureClientToolIds(apiKey: string, requiredClientTools: Array<{ 
 export async function createHappierElevenLabsAgent(params: { apiKey: string; tts?: ElevenLabsTtsConfigInput | null }): Promise<{ agentId: string }> {
   const apiKey = params.apiKey;
   const state = storage.getState() as any;
-  const required = resolveElevenLabsRequiredClientTools(state);
+  const required = resolveRequiredVoiceClientTools(state);
   const toolIds = await ensureClientToolIds(apiKey, required);
   const disabledActionIds = resolveDisabledVoiceActionIdsFromState(state);
   const systemAppendBlocks = await resolveUiVoicePromptStackBlocks();
-  const prompt = sanitizeElevenLabsAgentPrompt(buildElevenLabsVoiceAgentPrompt({ disabledActionIds, extraSystemAppendBlocks: systemAppendBlocks }));
+  const prompt = sanitizeElevenLabsAgentPrompt(buildRealtimeVoiceAgentPrompt({ disabledActionIds, extraSystemAppendBlocks: systemAppendBlocks }));
   const tts = await resolveTtsConfig(apiKey, params.tts);
 
   const json = await elevenLabsFetchJson({
@@ -367,11 +367,11 @@ export async function updateHappierElevenLabsAgent({
   tts?: ElevenLabsTtsConfigInput | null;
 }): Promise<void> {
   const state = storage.getState() as any;
-  const required = resolveElevenLabsRequiredClientTools(state);
+  const required = resolveRequiredVoiceClientTools(state);
   const toolIds = await ensureClientToolIds(apiKey, required);
   const disabledActionIds = resolveDisabledVoiceActionIdsFromState(state);
   const systemAppendBlocks = await resolveUiVoicePromptStackBlocks();
-  const prompt = sanitizeElevenLabsAgentPrompt(buildElevenLabsVoiceAgentPrompt({ disabledActionIds, extraSystemAppendBlocks: systemAppendBlocks }));
+  const prompt = sanitizeElevenLabsAgentPrompt(buildRealtimeVoiceAgentPrompt({ disabledActionIds, extraSystemAppendBlocks: systemAppendBlocks }));
   const ttsConfig = await resolveTtsConfig(apiKey, tts);
 
   await elevenLabsFetchJson({
