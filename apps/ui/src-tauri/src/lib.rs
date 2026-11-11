@@ -228,6 +228,22 @@ mod desktop_dialog {
     use tauri_plugin_dialog::DialogExt;
     use tokio::sync::oneshot;
 
+    // Origins the user allowed this run. The app's pre-flight permission probe and the provider's
+    // own capture each call getUserMedia, so without this every call start asked twice. Only an
+    // Allow is remembered (like a browser's per-site grant); a Deny asks again on the next attempt.
+    // DO NOT hold this lock across `dialog.run()`: its nested GTK loop can deliver another
+    // permission request on this same thread, and std's Mutex is not re-entrant.
+    #[cfg(target_os = "linux")]
+    static LINUX_MICROPHONE_ALLOWED_ORIGINS: std::sync::Mutex<Vec<String>> =
+        std::sync::Mutex::new(Vec::new());
+
+    #[cfg(target_os = "linux")]
+    fn linux_microphone_allowed_origins() -> std::sync::MutexGuard<'static, Vec<String>> {
+        LINUX_MICROPHONE_ALLOWED_ORIGINS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     // WebKitGTK's default is to deny media requests without displaying a prompt.
     // Keep consent in the native permission owner, shared by every web voice provider.
     #[cfg(target_os = "linux")]
@@ -246,6 +262,10 @@ mod desktop_dialog {
         let Ok(url) = webview.url() else {
             return PermissionResponse::Deny;
         };
+        let origin = url.origin().ascii_serialization();
+        if linux_microphone_allowed_origins().contains(&origin) {
+            return PermissionResponse::Allow;
+        }
         let dialog = gtk::MessageDialog::new(
             Some(&parent),
             gtk::DialogFlags::MODAL,
@@ -255,7 +275,7 @@ mod desktop_dialog {
         );
         dialog.set_secondary_text(Some(&format!(
             "{} wants to use your microphone for voice conversations.",
-            url.origin().ascii_serialization()
+            origin
         )));
         dialog.add_button("Deny", gtk::ResponseType::Cancel);
         dialog.add_button("Allow", gtk::ResponseType::Accept);
@@ -263,6 +283,10 @@ mod desktop_dialog {
         let response = dialog.run();
         dialog.close();
         if response == gtk::ResponseType::Accept {
+            let mut allowed = linux_microphone_allowed_origins();
+            if !allowed.contains(&origin) {
+                allowed.push(origin);
+            }
             PermissionResponse::Allow
         } else {
             PermissionResponse::Deny
