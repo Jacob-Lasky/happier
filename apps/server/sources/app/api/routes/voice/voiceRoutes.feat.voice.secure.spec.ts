@@ -81,7 +81,9 @@ describe("voiceRoutes (secure)", () => {
                 allowed: true, token: "deepgram_grant", leaseId: "lease_1",
             }));
             expect(globalThis.fetch).toHaveBeenCalledWith("https://api.deepgram.com/v1/auth/grant", expect.objectContaining({
-                method: "POST", body: JSON.stringify({ ttl_seconds: 600 }),
+                // The grant only authenticates the WebSocket handshake; a session outlives it, so keep
+                // the reuse window to Deepgram's default instead of the lease duration.
+                method: "POST", body: JSON.stringify({ ttl_seconds: 30 }),
                 headers: expect.objectContaining({ Authorization: "Token deepgram_test_key" }),
             }));
             expect(leaseCreate).toHaveBeenCalledWith(expect.objectContaining({

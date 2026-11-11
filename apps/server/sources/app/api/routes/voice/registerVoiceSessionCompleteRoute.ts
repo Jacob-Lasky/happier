@@ -2,6 +2,7 @@ import { z } from "zod";
 import { log } from "@/utils/logging/log";
 import { db } from "@/storage/db";
 import { resolveElevenLabsApiBaseUrl } from "@/voice/elevenLabsEnv";
+import { fetchFinalizedDeepgramUsage } from "@/voice/deepgramVoice";
 import { resolveServerFeaturesForGating } from "@/app/features/catalog/serverFeatureGate";
 import { resolveApiHotEndpointRateLimit } from "@/app/api/utils/apiRateLimitCatalog";
 import { type Fastify } from "../../types";
@@ -77,22 +78,7 @@ export function registerVoiceSessionCompleteRoute(app: Fastify): void {
         try {
             let duration: number;
             if (providerId === "deepgram") {
-                const headers = { Authorization: `Token ${process.env.DEEPGRAM_API_KEY?.trim() ?? ""}` };
-                let projectId = process.env.DEEPGRAM_PROJECT_ID?.trim();
-                if (!projectId) {
-                    const projectsResponse = await fetch("https://api.deepgram.com/v1/projects", { headers, signal: controller.signal });
-                    if (!projectsResponse.ok) throw new Error("deepgram_projects_unavailable");
-                    const projects = z.object({ projects: z.array(z.object({ project_id: z.string() })) }).parse(await projectsResponse.json()).projects;
-                    // A member key can see multiple projects; never guess which account should be charged.
-                    if (projects.length !== 1) throw new Error("deepgram_project_configuration_required");
-                    projectId = projects[0].project_id;
-                }
-                const response = await fetch(`https://api.deepgram.com/v1/projects/${encodeURIComponent(projectId)}/requests/${encodeURIComponent(providerConversationId)}`, { headers, signal: controller.signal });
-                if (!response.ok) throw new Error("deepgram_usage_unavailable");
-                const usage = z.object({
-                    request_id: z.string(), path: z.string(), created: z.string().datetime({ offset: true }),
-                    response: z.object({ completed: z.string().datetime({ offset: true }), details: z.object({ tags: z.array(z.string()) }), sts_details: z.object({ duration: z.number().finite().nonnegative() }) }),
-                }).parse(await response.json());
+                const usage = await fetchFinalizedDeepgramUsage(process.env, providerConversationId, controller.signal);
                 if (usage.request_id !== providerConversationId || usage.path.split("?")[0] !== "/v1/agent/converse" || !usage.response.details.tags.includes(lease.id)) {
                     return reply.code(404).send({ ok: false, reason: "not_found" as const });
                 }

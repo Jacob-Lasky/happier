@@ -3,6 +3,8 @@ import { log } from "@/utils/logging/log";
 import { db } from "@/storage/db";
 import { parseIntEnv } from "@/config/env";
 import { resolveElevenLabsAgentId, resolveElevenLabsApiBaseUrl } from "@/voice/elevenLabsEnv";
+import { DEEPGRAM_GRANT_TTL_SECONDS, deepgramApiUrl, resolveDeepgramApiKey } from "@/voice/deepgramVoice";
+import { resolveVoiceProviderConfiguration } from "@/app/features/voiceFeature";
 import { readVoiceFeatureEnv } from "@/app/features/catalog/readFeatureEnv";
 import { resolveServerFeaturesForGating } from "@/app/features/catalog/serverFeatureGate";
 import { resolveApiHotEndpointRateLimit } from "@/app/api/utils/apiRateLimitCatalog";
@@ -82,7 +84,7 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
             if (voiceCaps.disabledByBuildPolicy === true) {
                 return reply.code(403).send({ allowed: false, reason: "voice_disabled" satisfies VoiceDenyReason });
             }
-            if (voiceCaps.requested === true && (providerId === "deepgram" ? !env.DEEPGRAM_API_KEY?.trim() || (readVoiceFeatureEnv(env).requireSubscription && !env.REVENUECAT_SECRET_KEY?.trim()) : voiceCaps.configured !== true)) {
+            if (voiceCaps.requested === true && !resolveVoiceProviderConfiguration(env)[providerId]) {
                 return reply.code(503).send({ allowed: false, reason: "misconfigured" satisfies VoiceDenyReason });
             }
             return reply.code(403).send({ allowed: false, reason: "voice_disabled" satisfies VoiceDenyReason });
@@ -92,7 +94,8 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
         const elevenLabsApiKey = env.ELEVENLABS_API_KEY?.trim() ?? "";
         const elevenLabsAgentId = resolveElevenLabsAgentId(env) ?? "";
         const elevenLabsApiBaseUrl = resolveElevenLabsApiBaseUrl(env);
-        if (providerId === "deepgram" ? !env.DEEPGRAM_API_KEY?.trim() : !elevenLabsApiKey || !elevenLabsAgentId) {
+        const deepgramApiKey = resolveDeepgramApiKey(env);
+        if (providerId === "deepgram" ? !deepgramApiKey : !elevenLabsApiKey || !elevenLabsAgentId) {
             log({ module: "voice" }, `Voice provider ${providerId} is misconfigured`);
             return reply.code(503).send({ allowed: false, reason: "misconfigured" satisfies VoiceDenyReason });
         }
@@ -302,14 +305,14 @@ export function registerVoiceMintRoute(app: Fastify, path: "/v1/voice/token" | "
         try {
             const response = await fetch(
                     providerId === "deepgram"
-                        ? "https://api.deepgram.com/v1/auth/grant"
+                        ? deepgramApiUrl("/v1/auth/grant")
                         : `${elevenLabsApiBaseUrl}/v1/convai/conversation/token?agent_id=${encodeURIComponent(elevenLabsAgentId)}`,
                     {
                         method: providerId === "deepgram" ? "POST" : "GET",
                         headers: providerId === "deepgram"
-                            ? { Authorization: `Token ${env.DEEPGRAM_API_KEY!.trim()}`, "Content-Type": "application/json" }
+                            ? { Authorization: `Token ${deepgramApiKey}`, "Content-Type": "application/json" }
                             : { "xi-api-key": elevenLabsApiKey, Accept: "application/json" },
-                        ...(providerId === "deepgram" ? { body: JSON.stringify({ ttl_seconds: Math.min(maxSessionSeconds, 3600) }) } : {}),
+                        ...(providerId === "deepgram" ? { body: JSON.stringify({ ttl_seconds: DEEPGRAM_GRANT_TTL_SECONDS }) } : {}),
                         signal: controller.signal,
                     }
                 );
