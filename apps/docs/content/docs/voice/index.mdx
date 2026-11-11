@@ -134,6 +134,10 @@ Stopping a call, switching away from Deepgram, or the call ending on its own rep
 
 Because the browser holds the Deepgram connection, the concurrency limit and session duration are enforced by the Happier app, not by the relay. A modified client could keep a call open past its lease or open extra calls with one grant, billed to the relay's Deepgram account. Keep this option to trusted users while it is experimental.
 
+Before Deepgram voice is offered beyond a single trusted deployment, the relay would need to proxy the Deepgram WebSocket itself so that it owns the call lifecycle, the duration cap, the agent settings and the lease release; that server-side relay is the hardening path for productizing this option.
+
+Older Happier apps do not know the Deepgram option. On a relay without ElevenLabs configured, opening an older app resets the voice provider to **Off** for the account; choose **Deepgram** again from a current web or Linux app.
+
 ## Use my ElevenLabs
 
 **Use my ElevenLabs** also runs a realtime ElevenLabs conversation, but it uses your own ElevenLabs account settings.

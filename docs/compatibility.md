@@ -356,6 +356,23 @@ do not gain Herdr controls. Current readers normalize the development-only neste
 cannot revive it. Remove this development reader once retained nested development
 settings are no longer encountered.
 
+### Deepgram realtime voice provider (development)
+
+`settings.voice.providerId` gains `realtime_deepgram`. Released UIs reject the
+unknown value and parse their default `realtime_elevenlabs` with Happier
+billing; their server-capability gate then writes `providerId: 'off'` to the
+synced account settings when `voice.happierVoice` is disabled, so on a relay
+with only Deepgram configured an older app resets the selection to Off. This is
+accepted graceful degradation for the experimental option (owner decision,
+2026-11-11): the user reselects Deepgram from a current web or Linux app. Where
+ElevenLabs is configured, an older app instead starts ElevenLabs voice. Revisit
+with an additive setting before offering Deepgram on released mobile builds.
+
+The lease table adds `providerId` with an `elevenlabs` default and keeps the
+physical `elevenLabsAgentId` column, so released servers still read every row.
+A released server verifies all completions against ElevenLabs, so configure
+`DEEPGRAM_API_KEY` only after every instance runs a Deepgram-aware release.
+
 ### Same-machine session handoff (development)
 
 Same-machine session handoff extends the existing tracked handoff operation and target-path field; it adds no session identity, storage format or transport strategy. The v2 daemon capability response adds `sameMachineHandoff`. Admission requires that field to be exactly `true` for a local move and continues to accept older capability responses for cross-machine handoff. Local preparation reuses the source export through the existing direct-peer strategy without requiring a network transfer carrier.
