@@ -244,6 +244,30 @@ mod desktop_dialog {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// Who is asking for the microphone: an optional key to remember an Allow under, and the dialog
+    /// label. DO NOT key by `url.origin().ascii_serialization()` alone: opaque origins (the app's
+    /// own bundled UI at `tauri://localhost`, `data:`, `file:`) all serialize to "null", so the
+    /// dialog said "null wants to use your microphone" and every opaque page shared one Allow.
+    /// Only tuple origins and the exact bundled-app origin are remembered; any other opaque page
+    /// has no trustworthy identity and is asked every time.
+    #[cfg(target_os = "linux")]
+    fn linux_microphone_requester(url: &tauri::Url) -> (Option<String>, String) {
+        let origin = url.origin();
+        if origin.is_tuple() {
+            let key = origin.ascii_serialization();
+            return (Some(key.clone()), key);
+        }
+        let is_bundled_app = url.scheme() == "tauri"
+            && url.host_str() == Some("localhost")
+            && url.port().is_none()
+            && url.username().is_empty()
+            && url.password().is_none();
+        if is_bundled_app {
+            return (Some("tauri://localhost".to_string()), "Happier".to_string());
+        }
+        (None, url.as_str().chars().take(120).collect())
+    }
+
     // WebKitGTK's default is to deny media requests without displaying a prompt.
     // Keep consent in the native permission owner, shared by every web voice provider.
     #[cfg(target_os = "linux")]
@@ -262,8 +286,8 @@ mod desktop_dialog {
         let Ok(url) = webview.url() else {
             return PermissionResponse::Deny;
         };
-        let origin = url.origin().ascii_serialization();
-        if linux_microphone_allowed_origins().contains(&origin) {
+        let (origin, requester) = linux_microphone_requester(&url);
+        if origin.as_ref().is_some_and(|key| linux_microphone_allowed_origins().contains(key)) {
             return PermissionResponse::Allow;
         }
         let dialog = gtk::MessageDialog::new(
@@ -275,7 +299,7 @@ mod desktop_dialog {
         );
         dialog.set_secondary_text(Some(&format!(
             "{} wants to use your microphone for voice conversations.",
-            origin
+            requester
         )));
         dialog.add_button("Deny", gtk::ResponseType::Cancel);
         dialog.add_button("Allow", gtk::ResponseType::Accept);
@@ -283,13 +307,39 @@ mod desktop_dialog {
         let response = dialog.run();
         dialog.close();
         if response == gtk::ResponseType::Accept {
-            let mut allowed = linux_microphone_allowed_origins();
-            if !allowed.contains(&origin) {
-                allowed.push(origin);
+            if let Some(key) = origin {
+                let mut allowed = linux_microphone_allowed_origins();
+                if !allowed.contains(&key) {
+                    allowed.push(key);
+                }
             }
             PermissionResponse::Allow
         } else {
             PermissionResponse::Deny
+        }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    mod linux_microphone_requester_tests {
+        use super::linux_microphone_requester;
+
+        fn requester(url: &str) -> (Option<String>, String) {
+            linux_microphone_requester(&tauri::Url::parse(url).unwrap())
+        }
+
+        #[test]
+        fn remembers_only_tuple_origins_and_the_exact_bundled_app() {
+            assert_eq!(requester("tauri://localhost/settings/voice"), (Some("tauri://localhost".to_string()), "Happier".to_string()));
+            assert_eq!(requester("http://127.0.0.1:3052/session/1").0.as_deref(), Some("http://127.0.0.1:3052"));
+        }
+
+        #[test]
+        fn asks_every_time_for_other_opaque_origins() {
+            for url in ["data:text/html,hi", "file:///tmp/a.html", "tauri://localhost:1234/", "tauri://user@localhost/", "tauri://evil/"] {
+                let (key, label) = requester(url);
+                assert_eq!(key, None, "{url} must not share a remembered Allow");
+                assert_ne!(label, "Happier", "{url} must not be labeled as the app");
+            }
         }
     }
 
