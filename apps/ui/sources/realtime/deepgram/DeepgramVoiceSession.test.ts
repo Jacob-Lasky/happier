@@ -60,4 +60,35 @@ describe('Deepgram voice wire lifecycle', () => {
     expect(f.audio.interrupt).toHaveBeenCalled();
     await session.endSession();
   });
+
+  it('withholds KeepAlive on the mic path and keeps it for textOnly sessions (Jake crash-hygiene spec, 2026-11-10)', async () => {
+    const flush = async () => { for (let i = 0; i < 10; i += 1) await Promise.resolve(); };
+    vi.useFakeTimers();
+    try {
+      // Mic (voice) path: streaming PCM holds the socket open, so no KeepAlive is sent. A crashed
+      // or stalled connection then closes the socket and frees the voice lease.
+      const mic = fixture();
+      const micStart = mic.session.startSession({ sessionId: 's1', token: 'grant', leaseId: 'lease1', textOnly: false });
+      await flush();
+      mic.receive({ type: 'Welcome', request_id: 'request1' });
+      mic.receive({ type: 'SettingsApplied' });
+      expect(await micStart).toBe('request1');
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(sentFrames(mic).some((m) => m.type === 'KeepAlive')).toBe(false);
+      await mic.session.endSession();
+
+      // textOnly (QA harness) path: no mic audio, so KeepAlive must keep the socket alive.
+      const text = fixture();
+      const textStart = text.session.startSession({ sessionId: 's2', token: 'grant', leaseId: 'lease2', textOnly: true });
+      await flush();
+      text.receive({ type: 'Welcome', request_id: 'request2' });
+      text.receive({ type: 'SettingsApplied' });
+      expect(await textStart).toBe('request2');
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(sentFrames(text).some((m) => m.type === 'KeepAlive')).toBe(true);
+      await text.session.endSession();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

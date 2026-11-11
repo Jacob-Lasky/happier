@@ -66,8 +66,26 @@ export class DeepgramVoiceSession implements VoiceSession {
               break;
             case 'SettingsApplied':
               if (!requestId) throw new Error('deepgram_missing_request_id');
-              // Deepgram requires KeepAlive every 3–5 seconds when not streaming microphone audio.
-              this.keepAlive = setInterval(() => this.send({ type: 'KeepAlive' }), 5000);
+              // DO NOT send KeepAlive on the microphone (voice) path. Streaming mic PCM already holds
+              // the socket open, so withholding KeepAlive means a stalled or dead client (mic frames
+              // stop arriving: device unplugged, audio graph stalls, tab killed) lets Deepgram idle
+              // close the socket instead of a zombie session pinned open forever by heartbeats. Jake's
+              // spec, 2026-11-10: do NOT send KeepAlive so that if a connection crashes the socket
+              // will close. For an ALIVE client that close is not silent: onStatus('disconnected') in
+              // RealtimeDeepgramVoiceSession.web.tsx runs stopRealtimeSession, which completes the
+              // Happier voice lease via completeHappierVoiceSession. A hard-crashed tab cannot run that
+              // path, so its lease frees on server-side expiry rather than instantly (tracked by the
+              // W302 server-relay hardening follow-up). The startup window before the first mic frame
+              // is intentionally unprotected as well: if mic permission is granted slower than the idle
+              // window, Deepgram closes the socket and the start fails cleanly and is retryable, which
+              // is cheaper than a steady-state heartbeat that would defeat the crash-close above. Do
+              // not re-enable KeepAlive for the mic path.
+              // KeepAlive is kept ONLY for textOnly (QA harness) sessions, which stream no mic audio
+              // and would otherwise hit Deepgram's idle timeout; Deepgram requires it every 3 to 5
+              // seconds when not streaming microphone audio.
+              if (config.textOnly) {
+                this.keepAlive = setInterval(() => this.send({ type: 'KeepAlive' }), 5000);
+              }
               void (async () => {
                 if (!config.textOnly) await this.options.audio.start((pcm) => {
                   if (this.socket === socket && socket.readyState === 1) socket.send(pcm);
