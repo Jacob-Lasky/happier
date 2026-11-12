@@ -18,12 +18,7 @@ import { fireAndForget } from '@/utils/system/fireAndForget';
 import type { VoiceLocalTtsSettings } from '@/sync/domains/settings/voiceLocalTtsSettings';
 import type { LocalTtsProviderSpec } from '../_types';
 import { Icon } from '@/components/ui/icons/Icon';
-
-function normalizeSecretStringPromptInput(value: string | null): VoiceLocalTtsSettings['googleCloud']['apiKey'] {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 
 const AUDIO_FORMAT_TITLES = {
   mp3: 'MP3',
@@ -168,7 +163,7 @@ const GoogleCloudTtsSettings: LocalTtsProviderSpec['Settings'] = (props) => {
               { inputType: 'secure-text' },
             );
             if (raw === null) return;
-            setGoogleCloud({ apiKey: normalizeSecretStringPromptInput(raw) });
+            setGoogleCloud({ apiKey: secretStringFromInput(raw) });
           })(), { tag: 'GoogleCloudTtsSettings.prompt.apiKey' });
         }}
       />

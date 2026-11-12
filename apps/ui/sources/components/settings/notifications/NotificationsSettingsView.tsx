@@ -38,6 +38,7 @@ import {
 } from './notificationChannels';
 import { useTauriNotificationPermissionDiagnostics } from './useTauriNotificationPermissionDiagnostics';
 import { Icon } from '@/components/ui/icons/Icon';
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 
 type ForegroundBehavior = 'full' | 'silent' | 'off';
 
@@ -198,8 +199,7 @@ export const NotificationsSettingsView = React.memo(function NotificationsSettin
                 inputType: 'secure-text',
             },
         );
-        const nextSecret = raw?.trim();
-        return nextSecret ? { _isSecretValue: true as const, value: nextSecret } : null;
+        return secretStringFromInput(raw);
     }, []);
 
     const handleAddWebhook = React.useCallback(async () => {

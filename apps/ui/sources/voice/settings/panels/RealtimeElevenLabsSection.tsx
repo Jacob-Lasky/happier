@@ -8,6 +8,7 @@ import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import type { VoiceSettings } from '@/sync/domains/settings/voiceSettings';
 import type { SecretString } from '@/sync/encryption/secretSettings';
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 import { t } from '@/text';
 import { fireAndForget } from '@/utils/system/fireAndForget';
 import { useUnistyles } from 'react-native-unistyles';
@@ -19,12 +20,6 @@ import {
 import { listElevenLabsVoices, type ElevenLabsVoiceSummary } from '@/realtime/elevenlabs/elevenLabsVoices';
 import { showElevenLabsAgentReuseDialog } from '@/voice/settings/modals/showElevenLabsAgentReuseDialog';
 import { Icon } from '@/components/ui/icons/Icon';
-
-function normalizeSecretStringPromptInput(value: string | null): SecretString | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
 
 const ELEVENLABS_TTS_MODEL_OPTIONS = [
   { id: 'eleven_multilingual_v2', subtitleKey: 'settingsVoice.byo.realtime.modelPicker.options.multilingualV2Subtitle' },
@@ -251,7 +246,7 @@ export function RealtimeElevenLabsSection(props: {
                 { inputType: 'secure-text', placeholder: t('settingsVoice.byo.apiKeyPlaceholder') },
               );
               if (raw === null) return;
-              setByo({ apiKey: normalizeSecretStringPromptInput(raw) });
+              setByo({ apiKey: secretStringFromInput(raw) });
             })(), { tag: 'RealtimeElevenLabsSection.prompt.apiKey' });
           }}
         />

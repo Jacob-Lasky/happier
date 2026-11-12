@@ -7,6 +7,7 @@ import { Item } from '@/components/ui/lists/Item';
 import { ItemGroup } from '@/components/ui/lists/ItemGroup';
 import { Modal } from '@/modal';
 import type { SecretString } from '@/sync/encryption/secretSettings';
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 import { t } from '@/text';
 import { Icon } from '@/components/ui/icons/Icon';
 
@@ -15,12 +16,6 @@ import {
     MemoryEmbeddingsOpenAiCompatibleConfigSchema,
     type MemorySettingsV1,
 } from '@happier-dev/protocol';
-
-function normalizeSecretStringPromptInput(value: string | null): SecretString | null {
-    if (value === null) return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
 
 type EmbeddingsModeOptionId = 'disabled' | 'preset:balanced' | 'preset:long_context' | 'preset:quality' | 'custom';
 
@@ -347,7 +342,7 @@ export const MemorySettingsEmbeddingsSection = React.memo(function MemorySetting
                             if (next === null) return;
                             updateEmbeddings(settings, props.writeSettings, {
                                 ...embeddings,
-                                custom: { ...customProvider, apiKey: normalizeSecretStringPromptInput(next) },
+                                custom: { ...customProvider, apiKey: secretStringFromInput(next) },
                             });
                         }}
                         showChevron={false}

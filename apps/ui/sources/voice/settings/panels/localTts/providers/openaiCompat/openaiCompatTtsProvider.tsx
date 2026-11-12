@@ -13,12 +13,7 @@ import { fireAndForget } from '@/utils/system/fireAndForget';
 import type { VoiceLocalTtsSettings } from '@/sync/domains/settings/voiceLocalTtsSettings';
 import type { LocalTtsProviderSpec } from '../_types';
 import { Icon } from '@/components/ui/icons/Icon';
-
-function normalizeSecretStringPromptInput(value: string | null): VoiceLocalTtsSettings['openaiCompat']['apiKey'] {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 
 const MP3_FORMAT_TITLE = 'MP3';
 const WAV_FORMAT_TITLE = 'WAV';
@@ -125,7 +120,7 @@ const OpenAiCompatTtsSettings: LocalTtsProviderSpec['Settings'] = (props) => {
               inputType: 'secure-text',
             });
             if (raw === null) return;
-            setOpenAiCompat({ apiKey: normalizeSecretStringPromptInput(raw) });
+            setOpenAiCompat({ apiKey: secretStringFromInput(raw) });
           })(), { tag: 'OpenAiCompatTtsSettings.prompt.apiKey' });
         }}
       />

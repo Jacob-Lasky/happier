@@ -7,6 +7,7 @@ import { Item } from '@/components/ui/lists/Item';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import type { SecretString } from '@/sync/encryption/secretSettings';
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 import { t } from '@/text';
 import type { VoiceLocalSttSettings } from '@/sync/domains/settings/voiceLocalSttSettings';
 import { LANGUAGES, getLanguageDisplayName } from '@/constants/Languages';
@@ -17,12 +18,6 @@ import { resolveGoogleAndroidCertSha1 } from '@/voice/local/localVoiceSettings';
 
 import type { LocalSttProviderSpec } from '../_types';
 import { Icon } from '@/components/ui/icons/Icon';
-
-function normalizeSecretStringPromptInput(value: string | null): SecretString | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
 
 const GoogleGeminiSttSettings: LocalSttProviderSpec['Settings'] = (props) => {
   const { theme } = useUnistyles();
@@ -74,7 +69,7 @@ const GoogleGeminiSttSettings: LocalSttProviderSpec['Settings'] = (props) => {
               inputType: 'secure-text',
             });
             if (raw === null) return;
-            setGoogleGemini({ apiKey: normalizeSecretStringPromptInput(raw) });
+            setGoogleGemini({ apiKey: secretStringFromInput(raw) });
           })(), { tag: 'googleGeminiSttProvider.promptApiKey' });
         }}
       />

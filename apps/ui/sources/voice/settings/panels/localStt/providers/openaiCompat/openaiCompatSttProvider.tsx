@@ -3,17 +3,12 @@ import * as React from 'react';
 import { Item } from '@/components/ui/lists/Item';
 import { Modal } from '@/modal';
 import type { SecretString } from '@/sync/encryption/secretSettings';
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 import { t } from '@/text';
 import type { VoiceLocalSttSettings } from '@/sync/domains/settings/voiceLocalSttSettings';
 import { fireAndForget } from '@/utils/system/fireAndForget';
 
 import type { LocalSttProviderSpec } from '../_types';
-
-function normalizeSecretStringPromptInput(value: string | null): SecretString | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
 
 const OpenAiCompatSttSettings: LocalSttProviderSpec['Settings'] = (props) => {
   const cfg = props.cfgStt as VoiceLocalSttSettings;
@@ -64,7 +59,7 @@ const OpenAiCompatSttSettings: LocalSttProviderSpec['Settings'] = (props) => {
               inputType: 'secure-text',
             });
             if (raw === null) return;
-            setOpenAiCompat({ apiKey: normalizeSecretStringPromptInput(raw) });
+            setOpenAiCompat({ apiKey: secretStringFromInput(raw) });
           })(), { tag: 'openaiCompatSttProvider.promptApiKey' });
         }}
       />

@@ -27,6 +27,15 @@ export type EncryptedString = EncryptedStringV1;
 export const SecretStringSchema = SecretStringV1Schema;
 export type SecretString = SecretStringV1;
 
+/**
+ * A secret the user typed (a key, token or password prompt) as a settings secret. Surrounding
+ * whitespace is dropped and a blank entry means "no secret", so clearing the field clears it.
+ */
+export function secretStringFromInput(value: string | null | undefined): SecretString | null {
+    const trimmed = value?.trim() ?? '';
+    return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
+}
+
 export async function deriveSettingsSecretsKey(masterSecret: Uint8Array): Promise<Uint8Array> {
   return deriveSettingsSecretsKeyV1(masterSecret);
 }
