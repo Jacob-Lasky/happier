@@ -2623,6 +2623,21 @@ export {
 } from './daemonTerminal.js';
 
 export {
+  DaemonVoiceRuntimeErrorCodeSchema,
+  DaemonVoiceRuntimeErrorSchema,
+  DaemonVoiceRuntimeStartRequestSchema,
+  DaemonVoiceRuntimeStartResponseSchema,
+  DaemonVoiceRuntimeStopRequestSchema,
+  DaemonVoiceRuntimeStopResponseSchema,
+  type DaemonVoiceRuntimeErrorCode,
+  type DaemonVoiceRuntimeError,
+  type DaemonVoiceRuntimeStartRequest,
+  type DaemonVoiceRuntimeStartResponse,
+  type DaemonVoiceRuntimeStopRequest,
+  type DaemonVoiceRuntimeStopResponse,
+} from './daemonVoiceRuntime.js';
+
+export {
   DirectSessionsProviderIdSchema,
   DirectSessionsSourceSchema,
   DirectSessionsAcpSessionListCapabilityRequestSchema,

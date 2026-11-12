@@ -84,6 +84,7 @@ import type { RpcHandlerManager } from '../rpc/RpcHandlerManager';
 import type { MemoryWorkerHandle } from '@/daemon/memory/memoryWorker';
 import { registerMachineMemoryRpcHandlers } from './rpcHandlers.memory';
 import { registerMachineTerminalRpcHandlers } from './rpcHandlers.terminal';
+import { registerMachineVoiceRuntimeRpcHandlers } from './rpcHandlers.voiceRuntime';
 import { registerMachineMcpServersRpcHandlers } from './rpcHandlers.mcpServers';
 import { registerMachineDirectSessionsRpcHandlers } from './rpcHandlers.directSessions';
 import { registerMachineConnectedServiceQuotaRpcHandlers } from './rpcHandlers.connectedServiceQuotas';
@@ -1155,6 +1156,7 @@ export function registerMachineRpcHandlers(params: Readonly<{
     },
   });
   registerMachineMcpServersRpcHandlers({ rpcHandlerManager });
+  registerMachineVoiceRuntimeRpcHandlers({ rpcHandlerManager });
   const promptAssetAdapterRegistry = createPromptAssetAdapterRegistry({
     homedir: params.deps?.promptAssetsHomedir,
     happierHomeDir: params.deps?.promptAssetsHappierHomeDir,

@@ -12,6 +12,8 @@ export const RPC_METHODS = {
   DAEMON_TERMINAL_RESIZE: 'daemon.terminal.resize',
   DAEMON_TERMINAL_CLOSE: 'daemon.terminal.close',
   DAEMON_TERMINAL_RESTART: 'daemon.terminal.restart',
+  DAEMON_VOICE_RUNTIME_START: 'daemon.voiceRuntime.start',
+  DAEMON_VOICE_RUNTIME_STOP: 'daemon.voiceRuntime.stop',
   DAEMON_MEMORY_SEARCH: 'daemon.memory.search',
   DAEMON_MEMORY_GET_WINDOW: 'daemon.memory.getWindow',
   DAEMON_MEMORY_ENSURE_UP_TO_DATE: 'daemon.memory.ensureUpToDate',
