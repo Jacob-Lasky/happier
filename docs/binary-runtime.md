@@ -475,6 +475,13 @@ its isolated Claude-SDK/MCP, Sharp, and PTY runtime smoke. The smoke clears `NOD
 dependencies cannot hide an incomplete archive, and also checks the stable target-projection
 invariants for unused Claude native fallbacks and Windows-only PTY inputs.
 
+The realtime voice runtime (`apps/voice-runtime`, Python/Pipecat) is **not** an optional runtime
+component yet. `apps/cli/src/daemon/voiceRuntime/resolveVoiceRuntimeLaunch.ts` only uses an
+interpreter named by `HAPPIER_VOICE_RUNTIME_PYTHON`, so every released CLI reports the runtime as
+unavailable. Shipping it means a self-contained bundle (no system Python) per target in the
+first-party component catalog, acquired like the components above. See
+[voice-runtime.md](voice-runtime.md).
+
 ## PATH exposure
 
 `packages/cli-common/src/firstPartyRuntime/ensureHappierCliPathExposure.ts` is the sole owner of

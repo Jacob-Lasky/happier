@@ -3,6 +3,7 @@ import { fireAndForget } from '@/utils/system/fireAndForget';
 import { storage } from '@/sync/domains/state/storage';
 import { resolveActiveLocalVoiceAgentBinding } from './resolveActiveLocalVoiceAgentBinding';
 import type { VoiceContextSink } from './VoiceContextSink';
+import { runsLocalConversationTurns } from '@/voice/local/localVoiceSettings';
 
 export function getVoiceContextSinkForSession(_sessionId: string): VoiceContextSink | null {
     const voice = getVoiceSession();
@@ -17,7 +18,7 @@ export function getVoiceContextSinkForSession(_sessionId: string): VoiceContextS
     const providerId = settings?.voice?.providerId ?? 'off';
     const conversationMode = settings?.voice?.adapters?.local_conversation?.conversationMode ?? 'direct_session';
     const activeLocalVoiceAgent =
-        providerId === 'local_conversation' && conversationMode === 'agent'
+        runsLocalConversationTurns(providerId) && conversationMode === 'agent'
             ? resolveActiveLocalVoiceAgentBinding()
             : null;
     if (activeLocalVoiceAgent) {

@@ -8,6 +8,7 @@ import { VoiceLocalTtsSchema } from './voiceLocalTtsSettings';
 export const VoiceProviderIdSchema = z.enum([
   'off',
   'realtime_elevenlabs',
+  'realtime_pipecat',
   'local_direct',
   'local_conversation',
 ]);
@@ -75,6 +76,41 @@ const VoiceRealtimeElevenLabsSchema = z.object({
       apiKey: SecretStringSchema.nullable().default(null),
     })
     .default({ agentId: null, apiKey: null }),
+});
+
+/**
+ * Deepgram STT models the Pipecat runtime runs. Flux finds its own turn boundaries; Nova-3 is paired
+ * with local voice activity detection and Pipecat's smart-turn model in the runtime.
+ */
+export const VoicePipecatSttModelSchema = z.enum(['flux-general-en', 'nova-3']);
+export type VoicePipecatSttModel = z.infer<typeof VoicePipecatSttModelSchema>;
+
+/**
+ * Realtime voice through the open-source Pipecat runtime on one of the user's machines. Turns run
+ * through the local conversation (its agent and conversation settings); this setting owns only the
+ * speech side: the user's own Deepgram key, the STT model and the Aura voice.
+ *
+ * DO NOT move this under `voice.adapters`. Released clients parse `voice` without unknown adapters
+ * and write the whole object back (their capability gate does so on its own), which would delete
+ * the user's key. They preserve unknown top-level settings, so it is the top-level `voicePipecat`
+ * setting (docs/compatibility.md, "Pipecat realtime voice provider").
+ */
+export const VoicePipecatSettingsSchema = z.object({
+  deepgram: z
+    .object({
+      apiKey: SecretStringSchema.nullable().default(null),
+    })
+    .prefault({}),
+  stt: z
+    .object({
+      model: VoicePipecatSttModelSchema.default('flux-general-en'),
+    })
+    .prefault({}),
+  tts: z
+    .object({
+      voice: z.string().trim().min(1).default('aura-2-helena-en'),
+    })
+    .prefault({}),
 });
 
 const LEGACY_HANDS_FREE_ENDPOINTING_DEFAULTS = {
@@ -272,6 +308,15 @@ export const VoiceSettingsSchema = z.object({
 });
 
 export type VoiceSettings = z.infer<typeof VoiceSettingsSchema>;
+
+export type VoicePipecatSettings = z.infer<typeof VoicePipecatSettingsSchema>;
+
+export const voicePipecatSettingsDefaults: VoicePipecatSettings = VoicePipecatSettingsSchema.parse({});
+
+/** Tolerant like `voiceSettingsParse`: an invalid field falls back alone, keeping the key. */
+export function voicePipecatSettingsParse(input: unknown): VoicePipecatSettings {
+  return parseDroppingInvalidFields(VoicePipecatSettingsSchema, input) ?? VoicePipecatSettingsSchema.parse({});
+}
 
 export const voiceSettingsDefaults: VoiceSettings = VoiceSettingsSchema.parse({});
 

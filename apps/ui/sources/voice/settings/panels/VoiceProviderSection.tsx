@@ -21,6 +21,7 @@ export function VoiceProviderSection(props: {
   const isHappier = props.voice.providerId === 'realtime_elevenlabs' && billingMode === 'happier';
   const isByo = props.voice.providerId === 'realtime_elevenlabs' && billingMode === 'byo';
   const isLocal = props.voice.providerId === 'local_direct' || props.voice.providerId === 'local_conversation';
+  const isPipecat = props.voice.providerId === 'realtime_pipecat';
 
   return (
     <ItemGroup title={t('settingsVoice.modeTitle')}>
@@ -65,6 +66,14 @@ export function VoiceProviderSection(props: {
             },
           })
         }
+        showChevron={false}
+      />
+
+      <Item
+        title={t('settingsVoice.mode.pipecat')}
+        subtitle={t('settingsVoice.mode.pipecatSubtitle')}
+        rightElement={isPipecat ? <Icon name="check-circle" size={24} color={theme.colors.accent.blue} /> : null}
+        onPress={() => select({ ...props.voice, providerId: 'realtime_pipecat' })}
         showChevron={false}
       />
 

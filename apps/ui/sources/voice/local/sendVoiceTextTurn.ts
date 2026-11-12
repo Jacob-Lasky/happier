@@ -1,6 +1,6 @@
 import { sync } from '@/sync/sync';
 import { createTtsChunker, resolveStreamingTtsChunkChars } from '@/voice/output/TtsChunker';
-import { speakAssistantText } from '@/voice/output/speakAssistantText';
+import { speakAssistantText, type VoiceSpeechOutput } from '@/voice/output/speakAssistantText';
 import { createSpeechTextContext, type SpeechTextContext } from '@/voice/output/speechText';
 import { resolveVoiceNetworkTimeoutMs } from '@/voice/runtime/fetchWithTimeout';
 import {
@@ -61,6 +61,8 @@ export async function sendVoiceTextTurn(params: {
     localId: string;
     handoffMode: 'interrupt_and_send';
   }>;
+  /** Speaks replies through the voice session itself (see VoiceSpeechOutput) instead of local TTS. */
+  speechOutput?: VoiceSpeechOutput;
 }): Promise<void> {
   const { sessionId, settings, userText } = params;
   const { adapterId, config } = resolveLocalVoiceAdapterSettings(settings);
@@ -178,6 +180,7 @@ export async function sendVoiceTextTurn(params: {
           networkTimeoutMs,
           registerPlaybackStopper: params.playbackController.registerStopper,
           onSpeaking: () => patchLocalVoiceState({ status: 'speaking' }),
+          output: params.speechOutput,
         });
         if (!spoken) speechFailed = true;
       };
@@ -297,6 +300,7 @@ export async function sendVoiceTextTurn(params: {
     networkTimeoutMs,
     registerPlaybackStopper: params.playbackController.registerStopper,
     onSpeaking: () => patchLocalVoiceState({ status: 'speaking' }),
+    output: params.speechOutput,
   });
   if (params.signal?.aborted) return;
   setIdleStateUnlessRecording(sessionId);

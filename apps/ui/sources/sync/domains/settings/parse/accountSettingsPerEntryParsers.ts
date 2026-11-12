@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { dbgSettings } from '../debugSettings';
 import { AIBackendProfileSchema } from '../../profiles/profileCompatibility';
 import { SavedSecretSchema } from '../savedSecretTypes';
-import { voiceSettingsParse } from '../voiceSettings';
+import { voicePipecatSettingsParse, voiceSettingsParse } from '../voiceSettings';
 import {
     ExecutionRunsGuidanceEntrySchema,
 } from '../registry/account/accountRuntimeSettingDefinitions';
@@ -80,6 +80,11 @@ export function applyAccountSettingsPerEntryParsing(params: {
 
     if (key === 'voice') {
         result.voice = voiceSettingsParse(value);
+        return true;
+    }
+
+    if (key === 'voicePipecat') {
+        result.voicePipecat = voicePipecatSettingsParse(value);
         return true;
     }
 

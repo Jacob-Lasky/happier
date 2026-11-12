@@ -339,4 +339,34 @@ describe('speakAssistantText', () => {
 
     expect(speech.speak).not.toHaveBeenCalled();
   });
+
+  it('hands speakable text to a session speech output instead of the configured device voice', async () => {
+    const spokenByOutput: string[] = [];
+    const spoken = await speakAssistantText({
+      text: '**Done.** See [the PR](https://github.com/x/y/pull/1).',
+      settings: settingsWithTts({ provider: 'device' }),
+      networkTimeoutMs: 15000,
+      registerPlaybackStopper: () => () => {},
+      onSpeaking: () => {},
+      output: { speak: async ({ text }) => { spokenByOutput.push(text); } },
+    });
+
+    expect(spoken).toBe(true);
+    expect(spokenByOutput).toEqual(['Done. See the PR.']);
+    expect(speech.speak).not.toHaveBeenCalled();
+  });
+
+  it('reports a failing session speech output as a speech failure', async () => {
+    const spoken = await speakAssistantText({
+      text: 'hello',
+      settings: settingsWithTts({ provider: 'device' }),
+      networkTimeoutMs: 15000,
+      registerPlaybackStopper: () => () => {},
+      onSpeaking: () => {},
+      output: { speak: async () => { throw new Error('voice_runtime_disconnected'); } },
+    });
+
+    expect(spoken).toBe(false);
+    expect(getLocalVoiceState()).toMatchObject({ error: 'tts_failed', errorMessage: 'voice_runtime_disconnected' });
+  });
 });

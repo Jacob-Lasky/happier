@@ -25,6 +25,13 @@ const LOCAL_VOICE_ERROR_KEYS: Readonly<Record<string, TranslationKeyNoParams>> =
   local_neural_audio_capture_failed: 'voiceSurface.errors.localNeuralAudioCaptureFailed',
   tts_failed: 'voiceSurface.errors.ttsFailed',
   voice_agent_unavailable: 'voiceSurface.errors.voiceAgentUnavailable',
+  voice_runtime_not_configured: 'voiceSurface.errors.voiceRuntimeNotConfigured',
+  voice_runtime_unsupported_platform: 'voiceSurface.errors.voiceRuntimeUnsupportedPlatform',
+  voice_runtime_microphone_denied: 'voiceSurface.errors.speechPermissionDenied',
+  voice_runtime_no_machine: 'voiceSurface.errors.voiceRuntimeNoMachine',
+  voice_runtime_unavailable: 'voiceSurface.errors.voiceRuntimeUnavailable',
+  voice_runtime_start_failed: 'voiceSurface.errors.voiceRuntimeStartFailed',
+  voice_runtime_invalid_request: 'voiceSurface.errors.voiceRuntimeStartFailed',
 };
 
 /** Feature toggles (Settings → Features) the daemon voice agent depends on, by error code. */
@@ -35,7 +42,7 @@ const VOICE_AGENT_FEATURE_LABEL_KEYS: Readonly<Record<string, TranslationKeyNoPa
 };
 
 /** Codes whose localized text is generic, so the raw root cause is worth showing next to it. */
-const CODES_WITH_DETAIL = new Set(['send_failed', 'stt_failed', 'tts_failed']);
+const CODES_WITH_DETAIL = new Set(['send_failed', 'stt_failed', 'tts_failed', 'voice_runtime_start_failed']);
 
 export type LocalVoiceErrorPresentation = Readonly<{ message: string; detail: string | null }>;
 

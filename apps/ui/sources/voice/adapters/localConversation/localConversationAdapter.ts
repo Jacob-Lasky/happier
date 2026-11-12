@@ -13,6 +13,7 @@ import { voiceAgentSessions } from '@/voice/agent/voiceAgentSessions';
 import type { VoiceAdapterController, VoiceSessionMode, VoiceSessionSnapshot, VoiceSessionStatus } from '@/voice/session/types';
 import { voiceSessionBindingManager } from '@/voice/sessionBinding/voiceSessionBindingRuntime';
 import { createVoicePlaybackController } from '@/voice/runtime/VoicePlaybackController';
+import type { VoiceSpeechOutput } from '@/voice/output/speakAssistantText';
 
 function mapLocalStatus(status: any): { status: VoiceSessionStatus; mode: VoiceSessionMode } {
   switch (status) {
@@ -30,6 +31,35 @@ function mapLocalStatus(status: any): { status: VoiceSessionStatus; mode: VoiceS
     default:
       return { status: 'disconnected', mode: 'idle' };
   }
+}
+
+/**
+ * A turn typed into a voice conversation, dispatched durably to its voice agent. Shared by every
+ * provider whose turns run through the local conversation; `speechOutput` speaks the reply through
+ * the provider's own speech instead of local TTS.
+ */
+export async function sendLocalConversationTextTurn(
+  opts: Parameters<NonNullable<VoiceAdapterController['sendTextTurn']>>[0],
+  speechOutput?: VoiceSpeechOutput,
+): Promise<void> {
+  const settings: any = storage.getState().settings;
+  const config = settings?.voice?.adapters?.local_conversation ?? {};
+  if ((config?.conversationMode ?? 'direct_session') !== 'agent') {
+    throw new Error('voice_session_native_send_only');
+  }
+
+  await sendVoiceTextTurn({
+    sessionId: opts.controlSessionId,
+    settings,
+    userText: opts.text,
+    playbackController: createVoicePlaybackController(),
+    voiceAgentSessions,
+    durableDispatch: {
+      localId: opts.localId,
+      handoffMode: opts.handoffMode,
+    },
+    ...(speechOutput ? { speechOutput } : {}),
+  });
 }
 
 export function createLocalConversationVoiceAdapter(): VoiceAdapterController {
@@ -98,25 +128,7 @@ export function createLocalConversationVoiceAdapter(): VoiceAdapterController {
     appendLocalVoiceAgentContextUpdate(resolveConversationSessionId(opts.sessionId), opts.update);
   };
 
-  const sendTextTurn: NonNullable<VoiceAdapterController['sendTextTurn']> = async (opts) => {
-    const settings: any = storage.getState().settings;
-    const config = settings?.voice?.adapters?.local_conversation ?? {};
-    if ((config?.conversationMode ?? 'direct_session') !== 'agent') {
-      throw new Error('voice_session_native_send_only');
-    }
-
-    await sendVoiceTextTurn({
-      sessionId: opts.controlSessionId,
-      settings,
-      userText: opts.text,
-      playbackController: createVoicePlaybackController(),
-      voiceAgentSessions,
-      durableDispatch: {
-        localId: opts.localId,
-        handoffMode: opts.handoffMode,
-      },
-    });
-  };
+  const sendTextTurn: NonNullable<VoiceAdapterController['sendTextTurn']> = (opts) => sendLocalConversationTextTurn(opts);
 
   return {
     id,

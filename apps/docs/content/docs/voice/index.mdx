@@ -3,11 +3,12 @@ title: Voice
 description: Choose a voice mode, understand how voice conversations map to sessions, and configure ElevenLabs or local voice in Happier.
 ---
 
-Happier supports four voice modes in **Settings → Voice**:
+Happier supports these voice modes in **Settings → Voice**:
 
 - **Off**: disables all voice features.
 - **Happier Voice**: realtime ElevenLabs voice using Happier-managed credentials and server-side quotas.
 - **Use my ElevenLabs**: realtime ElevenLabs voice using your own API key and agent.
+- **Pipecat realtime voice** *(development builds only)*: realtime voice through the open-source Pipecat runtime on your own machine, with your own Deepgram API key.
 - **Local voice**: a configurable STT/TTS pipeline with device, self-hosted, Google, and local-neural providers.
 
 ## Start here
@@ -170,6 +171,44 @@ From the ElevenLabs section you can:
 - reuse an existing agent if you already have one
 
 This is the easiest way to keep your ElevenLabs agent aligned with Happier’s current tool and prompt wiring.
+
+## Pipecat realtime voice
+
+<Callout type="warn">
+Development builds only. The voice runtime is not shipped with released CLIs yet, so on a released
+install this mode reports that the runtime isn't installed.
+</Callout>
+
+**Pipecat realtime voice** is a hands-free, interruptible conversation where the speech runs in an
+open-source [Pipecat](https://github.com/pipecat-ai/pipecat) runtime on one of your own machines:
+
+- your microphone audio goes directly (WebRTC) from the app to that machine, then to Deepgram
+- Deepgram transcribes you (**Flux**, which hears when you have finished speaking, or **Nova-3**)
+  and speaks the reply with an **Aura-2** voice
+- talking over the reply stops it
+
+Your turns run exactly like **Local voice** turns: the same conversation mode (straight to the
+session, or through the voice agent), the same agent settings and the same privacy settings. Only
+the speech is different, so the Pipecat settings replace Local voice's speech-to-text and
+text-to-speech groups.
+
+Like Local voice, it needs **Voice** turned on in **Settings → Features** first.
+
+### What you configure
+
+- **Deepgram API key**: your own key, kept with your other provider keys in your settings and sent
+  only to your own machine when a call starts. Like those keys, it is end-to-end encrypted unless
+  your account uses plaintext storage, where you have chosen to trust your server with it.
+- **Speech recognition**: Deepgram Flux (English) or Deepgram Nova-3.
+- **Voice**: the Aura-2 voice that speaks replies.
+
+The runtime runs on the machine that hosts your voice conversation: the voice agent's machine in
+Agent mode, otherwise the machine of the session you are talking to.
+
+### Where it works
+
+In the web app (any browser with WebRTC). The Linux desktop app's webview has no WebRTC, and the
+mobile apps are not wired yet; both say the mode isn't available in this app.
 
 ## Local voice
 

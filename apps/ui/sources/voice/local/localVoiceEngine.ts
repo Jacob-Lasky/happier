@@ -11,7 +11,7 @@ import { resolveSttFailureCode } from '@/voice/input/sttRequestError';
 import { VOICE_AGENT_GLOBAL_SESSION_ID } from '@/voice/agent/voiceAgentGlobalSessionId';
 import { findVoiceConversationSessionId } from '@/voice/sessionBinding/voiceConversationSession';
 import { voiceAgentSessions } from '@/voice/agent/voiceAgentSessions';
-import { speakAssistantText } from '@/voice/output/speakAssistantText';
+import { speakAssistantText, type VoiceSpeechOutput } from '@/voice/output/speakAssistantText';
 import { resolveVoiceNetworkTimeoutMs } from '@/voice/runtime/fetchWithTimeout';
 import { createVoicePlaybackController } from '@/voice/runtime/VoicePlaybackController';
 import { voiceActivityController } from '@/voice/activity/voiceActivityController';
@@ -318,6 +318,37 @@ export async function sendLocalVoiceAgentTextUpdate(sessionId: string, update: s
       signal,
     }),
   );
+}
+
+/**
+ * Runs one user turn whose speech was captured outside this engine (the Pipecat runtime finds the
+ * user's turn and speaks the reply itself), with this engine's turn ownership: a new turn aborts the
+ * previous one, failures land in the local voice state, and barge-in drops the rest of the reply.
+ */
+export async function runLocalVoiceTextTurn(params: Readonly<{
+  sessionId: string;
+  text: string;
+  speechOutput: VoiceSpeechOutput;
+}>): Promise<void> {
+  const text = params.text.trim();
+  if (!text) return;
+  const settings = storage.getState().settings as any;
+  await runVoiceTurnWithSendFailureHandling(params.sessionId, (signal) =>
+    sendVoiceTextTurnImpl({
+      sessionId: params.sessionId,
+      settings,
+      userText: text,
+      playbackController,
+      voiceAgentSessions,
+      signal,
+      speechOutput: params.speechOutput,
+    }),
+  );
+}
+
+/** The user talked over the reply: drop what is still queued for this turn and stop what plays. */
+export function interruptLocalVoicePlayback(): void {
+  playbackController.interrupt();
 }
 
 async function runAbortableVoiceTurn(sessionId: string, runner: (signal: AbortSignal) => Promise<void>): Promise<void> {

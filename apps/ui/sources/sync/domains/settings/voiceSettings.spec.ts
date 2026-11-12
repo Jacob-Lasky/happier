@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { voiceSettingsDefaults, voiceSettingsParse } from './voiceSettings';
+import { voicePipecatSettingsDefaults, voicePipecatSettingsParse, voiceSettingsDefaults, voiceSettingsParse } from './voiceSettings';
 
 describe('voiceSettings', () => {
   it('defaults include ui activity feed + scope settings', () => {
@@ -245,6 +245,27 @@ describe('voiceSettings', () => {
     expect(stt.openaiCompat.baseUrl).toBe('http://stt.local');
     expect(stt.openaiCompat.model).toBe('whisper-large');
     expect(stt.openaiCompat.apiKey).toBeNull();
+  });
+
+  it('keeps the Pipecat provider selection in voice and its settings in their own top-level setting', () => {
+    const parsed = voiceSettingsParse({ providerId: 'realtime_pipecat', adapters: { realtime_pipecat: { stt: { model: 'nova-3' } } } });
+    expect(parsed.providerId).toBe('realtime_pipecat');
+    // Released clients rewrite the whole voice object without unknown adapters, so Pipecat data
+    // (including the user's key) never lives there.
+    expect('realtime_pipecat' in parsed.adapters).toBe(false);
+  });
+
+  it('parses Pipecat settings field by field, so a value from a newer app costs only that field', () => {
+    const apiKey = { _isSecretValue: true, value: 'dg-user-key' };
+    const parsed = voicePipecatSettingsParse({
+      deepgram: { apiKey },
+      stt: { model: 'model-from-a-newer-app' },
+      tts: { voice: 'aura-2-thalia-en' },
+    });
+    expect(parsed.deepgram.apiKey).toEqual(apiKey);
+    expect(parsed.stt.model).toBe('flux-general-en');
+    expect(parsed.tts.voice).toBe('aura-2-thalia-en');
+    expect(voicePipecatSettingsParse('garbage')).toEqual(voicePipecatSettingsDefaults);
   });
 
   it('accepts local_neural as a local TTS provider (Kokoro model)', () => {

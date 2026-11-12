@@ -11,6 +11,15 @@ import { normalizeTurnEndpointPolicy, type TurnEndpointPolicy } from '@/voice/in
 
 export type LocalVoiceSettingsInput = Readonly<Pick<Settings, 'voice'>>;
 
+/**
+ * Whether this voice provider runs its turns through the local conversation: its conversation mode
+ * (direct to the session, or through the voice agent), agent and transcript. `realtime_pipecat`
+ * replaces only the speech around those turns (a realtime STT/TTS runtime), not the turns.
+ */
+export function runsLocalConversationTurns(providerId: unknown): boolean {
+  return providerId === 'local_conversation' || providerId === 'realtime_pipecat';
+}
+
 export function resolveLocalVoiceAdapterSettings(settings: LocalVoiceSettingsInput): {
   adapterId: 'local_direct' | 'local_conversation';
   config: Readonly<Partial<VoiceSettings['adapters']['local_conversation']>>;
@@ -20,7 +29,7 @@ export function resolveLocalVoiceAdapterSettings(settings: LocalVoiceSettingsInp
   if (providerId === 'local_direct') {
     return { adapterId: 'local_direct', config: voice?.adapters?.local_direct ?? {} };
   }
-  if (providerId === 'local_conversation') {
+  if (runsLocalConversationTurns(providerId)) {
     return { adapterId: 'local_conversation', config: voice?.adapters?.local_conversation ?? {} };
   }
   return {

@@ -1,4 +1,5 @@
 import { normalizeNonEmptyString } from '@/voice/shared/normalizeNonEmptyString';
+import { runsLocalConversationTurns } from '@/voice/local/localVoiceSettings';
 
 export type VoiceAgentSessionTeleportAvailability =
     | Readonly<{ ok: true }>
@@ -12,7 +13,7 @@ export function getVoiceAgentSessionTeleportAvailability(params: Readonly<{ voic
     if (!sessionId) return { ok: false, code: 'VOICE_TELEPORT_UNAVAILABLE' };
 
     const voice = params.voice as any;
-    if (voice?.providerId !== 'local_conversation') return { ok: false, code: 'VOICE_TELEPORT_UNAVAILABLE' };
+    if (!runsLocalConversationTurns(voice?.providerId)) return { ok: false, code: 'VOICE_TELEPORT_UNAVAILABLE' };
 
     const adapterCfg = voice?.adapters?.local_conversation ?? null;
     if (adapterCfg?.conversationMode !== 'agent') return { ok: false, code: 'VOICE_TELEPORT_UNAVAILABLE' };

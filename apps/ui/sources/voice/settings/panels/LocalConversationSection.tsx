@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/forms/Switch';
 import { Modal } from '@/modal';
 import type { VoiceSettings } from '@/sync/domains/settings/voiceSettings';
 import type { SecretString } from '@/sync/encryption/secretSettings';
+import { secretStringFromInput } from '@/sync/encryption/secretSettings';
 import { t } from '@/text';
 import { fireAndForget } from '@/utils/system/fireAndForget';
 import { LocalVoiceSttGroup } from '@/voice/settings/panels/localStt/LocalVoiceSttGroup';
@@ -29,12 +30,8 @@ import { useAllMachines } from '@/sync/store/hooks';
 import { useSetting, useSettings } from '@/sync/domains/state/storage';
 import { resolvePreferredMachineId } from '@/components/settings/pickers/resolvePreferredMachineId';
 import { Icon } from '@/components/ui/icons/Icon';
-
-function normalizeSecretStringPromptInput(value: string | null): SecretString | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? { _isSecretValue: true, value: trimmed } : null;
-}
+import { runsLocalConversationTurns } from '@/voice/local/localVoiceSettings';
+import { PipecatSpeechGroup } from './PipecatSpeechGroup';
 
 export function LocalConversationSection(props: {
   voice: VoiceSettings;
@@ -66,7 +63,9 @@ export function LocalConversationSection(props: {
   >(null);
 
   const cfg = props.voice.adapters.local_conversation;
-  const enabled = props.voice.providerId === 'local_conversation';
+  const enabled = runsLocalConversationTurns(props.voice.providerId);
+  // Pipecat keeps these conversation settings and brings its own speech (Deepgram STT/TTS).
+  const usesPipecatSpeech = props.voice.providerId === 'realtime_pipecat';
   const machines = useAllMachines();
   const recentMachinePaths = useSetting('recentMachinePaths') as any[] | undefined;
 
@@ -256,24 +255,30 @@ export function LocalConversationSection(props: {
         />
       </ItemGroup>
 
-      <LocalVoiceSttGroup
-        cfgStt={cfg.stt}
-        setStt={(next) => setCfg({ stt: next })}
-        popoverBoundaryRef={props.popoverBoundaryRef}
-      />
+      {usesPipecatSpeech ? (
+        <PipecatSpeechGroup popoverBoundaryRef={props.popoverBoundaryRef} />
+      ) : (
+        <>
+          <LocalVoiceSttGroup
+            cfgStt={cfg.stt}
+            setStt={(next) => setCfg({ stt: next })}
+            popoverBoundaryRef={props.popoverBoundaryRef}
+          />
 
-      <LocalVoiceHandsFreeGroup
-        cfgStt={cfg.stt}
-        handsFree={cfg.handsFree}
-        setHandsFree={(next) => setCfg({ handsFree: next })}
-      />
+          <LocalVoiceHandsFreeGroup
+            cfgStt={cfg.stt}
+            handsFree={cfg.handsFree}
+            setHandsFree={(next) => setCfg({ handsFree: next })}
+          />
 
-      <LocalVoiceTtsGroup
-        cfgTts={cfg.tts}
-        setTts={(next) => setCfg({ tts: next })}
-        networkTimeoutMs={cfg.networkTimeoutMs}
-        popoverBoundaryRef={props.popoverBoundaryRef}
-      />
+          <LocalVoiceTtsGroup
+            cfgTts={cfg.tts}
+            setTts={(next) => setCfg({ tts: next })}
+            networkTimeoutMs={cfg.networkTimeoutMs}
+            popoverBoundaryRef={props.popoverBoundaryRef}
+          />
+        </>
+      )}
 
       {cfg.conversationMode === 'agent' ? (
         <>
@@ -1061,7 +1066,7 @@ export function LocalConversationSection(props: {
                 );
                 if (raw === null) return;
                 setAgent({
-                  openaiCompat: { ...cfg.agent.openaiCompat, chatApiKey: normalizeSecretStringPromptInput(raw) },
+                  openaiCompat: { ...cfg.agent.openaiCompat, chatApiKey: secretStringFromInput(raw) },
                 });
               })(), { tag: 'LocalConversationSection.prompt.openaiCompat.chatApiKey' });
             }}

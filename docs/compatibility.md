@@ -371,6 +371,19 @@ do not gain Herdr controls. Current readers normalize the development-only neste
 cannot revive it. Remove this development reader once retained nested development
 settings are no longer encountered.
 
+### Pipecat realtime voice provider (development)
+
+`settings.voice.providerId` gains `realtime_pipecat`. Released UIs reject the unknown value, parse
+their default and, when their capability gate decides, write the whole `voice` object back, as
+recorded for the experimental Deepgram provider above (owner decision, 2026-11-11): the selection
+degrades and the user reselects it from a current web app. Everything else Pipecat stores lives in
+the additive top-level `voicePipecat` setting, which released UIs carry through unchanged, so that
+write cannot delete the user's Deepgram key or choices. Current readers parse `voicePipecat` field
+by field (`voicePipecatSettingsParse`), so a value written by a newer app loses only that field.
+
+The daemon RPCs `daemon.voiceRuntime.start` and `daemon.voiceRuntime.stop` are new; a released
+daemon answers them as unknown methods and the app reports the runtime as unavailable.
+
 ### Same-machine session handoff (development)
 
 Same-machine session handoff extends the existing tracked handoff operation and target-path field; it adds no session identity, storage format or transport strategy. The v2 daemon capability response adds `sameMachineHandoff`. Admission requires that field to be exactly `true` for a local move and continues to accept older capability responses for cross-machine handoff. Local preparation reuses the source export through the existing direct-peer strategy without requiring a network transfer carrier.

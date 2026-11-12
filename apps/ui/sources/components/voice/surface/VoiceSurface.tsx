@@ -38,6 +38,7 @@ import { isHiddenSystemSession } from '@happier-dev/protocol';
 import { getVoiceAgentSessionTeleportAvailability } from '@/voice/agent/getVoiceAgentSessionTeleportAvailability';
 import { normalizeNonEmptyString } from '@/voice/shared/normalizeNonEmptyString';
 import { Icon } from '@/components/ui/icons/Icon';
+import { runsLocalConversationTurns } from '@/voice/local/localVoiceSettings';
 
 
 export type VoiceSurfaceVariant = 'sidebar' | 'session';
@@ -85,14 +86,13 @@ export function VoiceSurface(props: Readonly<{ variant: VoiceSurfaceVariant; ses
       : (routeSessionId ?? (typeof lastFocusedSessionId === 'string' ? lastFocusedSessionId : null));
 
   const localConversationMode =
-    providerId === 'local_conversation' ? (voice?.adapters?.local_conversation?.conversationMode ?? 'direct_session') : null;
+    runsLocalConversationTurns(providerId) ? (voice?.adapters?.local_conversation?.conversationMode ?? 'direct_session') : null;
   const voiceAgentEnabled = useFeatureEnabled('voice.agent');
   const allowsGlobalStart =
-    providerId === 'realtime_elevenlabs' || (providerId === 'local_conversation' && localConversationMode === 'agent');
+    providerId === 'realtime_elevenlabs' || localConversationMode === 'agent';
 
-  const localAgentCfg = providerId === 'local_conversation' ? voice?.adapters?.local_conversation?.agent ?? null : null;
+  const localAgentCfg = runsLocalConversationTurns(providerId) ? voice?.adapters?.local_conversation?.agent ?? null : null;
   const daemonLocalVoiceUnavailable =
-    providerId === 'local_conversation' &&
     localConversationMode === 'agent' &&
     localAgentCfg?.backend === 'daemon' &&
     voiceAgentEnabled !== true;
@@ -133,7 +133,6 @@ export function VoiceSurface(props: Readonly<{ variant: VoiceSurfaceVariant; ses
     const shouldHydrateVoiceAgentTranscript =
       props.variant === 'sidebar' &&
       activityFeedEnabled &&
-      providerId === 'local_conversation' &&
       localConversationMode === 'agent' &&
       voiceAgentTranscriptPersistenceMode === 'persistent';
 
@@ -176,7 +175,7 @@ export function VoiceSurface(props: Readonly<{ variant: VoiceSurfaceVariant; ses
   );
   const controlSessionCandidates = React.useMemo(() => ([
     typeof snap.sessionId === 'string' ? snap.sessionId.trim() : '',
-    providerId === 'realtime_elevenlabs' || (providerId === 'local_conversation' && localConversationMode === 'agent')
+    providerId === 'realtime_elevenlabs' || localConversationMode === 'agent'
       ? VOICE_AGENT_GLOBAL_SESSION_ID
       : '',
     typeof props.sessionId === 'string' ? props.sessionId.trim() : '',

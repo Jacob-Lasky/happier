@@ -9,6 +9,7 @@ import { shouldRecoverUnavailableGlobalVoiceAutoMachine } from '@/voice/agent/sh
 import { normalizeNonEmptyString } from '@/voice/shared/normalizeNonEmptyString';
 
 import type { VoiceConversationBindingResolution } from './voiceSessionBindingTypes';
+import { runsLocalConversationTurns } from '@/voice/local/localVoiceSettings';
 
 function resolveLocalConversationTranscriptMode(settings: any): 'native_session' | 'synthetic' | null {
   const config = settings?.voice?.adapters?.local_conversation ?? null;
@@ -31,7 +32,7 @@ async function ensureVoiceHomeConversationSessionIdWithRecovery(params: Readonly
   } catch (error) {
     const isGlobalLocalDaemonVoiceAgent =
       params.controlSessionId === VOICE_AGENT_GLOBAL_SESSION_ID
-      && params.providerId === 'local_conversation'
+      && runsLocalConversationTurns(params.providerId)
       && resolveLocalConversationTranscriptMode(params.settings) === 'native_session';
     if (!isGlobalLocalDaemonVoiceAgent) throw error;
     if (!shouldRecoverUnavailableGlobalVoiceAutoMachine(error)) throw error;
@@ -72,7 +73,7 @@ export async function ensureVoiceConversationBindingResolution(params: Readonly<
     };
   }
 
-  if (params.providerId === 'local_conversation') {
+  if (runsLocalConversationTurns(params.providerId)) {
     const transcriptMode = resolveLocalConversationTranscriptMode(params.settings);
     if (!transcriptMode) return null;
     const conversationSessionId = await resolveConversationSessionId();

@@ -28,6 +28,8 @@ function getConfiguredProviderLabel(providerId: string): string {
       return t('settingsVoice.mode.local');
     case 'realtime_elevenlabs':
       return t('settingsVoice.mode.byo');
+    case 'realtime_pipecat':
+      return t('settingsVoice.mode.pipecat');
     case 'off':
       return t('settingsVoice.mode.off');
     default:

@@ -1,7 +1,13 @@
 import { defineSettingDefinitions } from '@happier-dev/protocol';
 
 import { DEFAULT_ELEVENLABS_VOICE_ID } from '@/realtime/elevenlabs/defaults';
-import { VoiceSettingsSchema, voiceSettingsDefaults, type VoiceSettings } from '@/sync/domains/settings/voiceSettings';
+import {
+    VoicePipecatSettingsSchema,
+    VoiceSettingsSchema,
+    voicePipecatSettingsDefaults,
+    voiceSettingsDefaults,
+    type VoiceSettings,
+} from '@/sync/domains/settings/voiceSettings';
 
 function hasNonEmptyString(value: unknown): value is string {
     return typeof value === 'string' && value.length > 0;
@@ -175,5 +181,11 @@ export const ACCOUNT_VOICE_SETTING_DEFINITIONS = defineSettingDefinitions({
             identityScope: 'person',
             serializeCurrentProperties: buildVoiceSummaryProperties,
         },
+    },
+    voicePipecat: {
+        schema: VoicePipecatSettingsSchema,
+        default: voicePipecatSettingsDefaults,
+        description: 'Pipecat realtime voice: the user\'s Deepgram key, STT model and Aura voice',
+        storageScope: 'account',
     },
 });
