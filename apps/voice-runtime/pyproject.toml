@@ -1,0 +1,29 @@
+[project]
+name = "happier-voice-runtime"
+version = "0.1.0"
+description = "Happier realtime voice runtime: a Pipecat audio front-end (transport, Deepgram STT/TTS, turn detection) for the app-owned voice conversation."
+requires-python = ">=3.12"
+dependencies = [
+    "pipecat-ai[deepgram,webrtc,silero]==1.16.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=1"]
+
+[project.scripts]
+happier-voice-runtime = "happier_voice_runtime.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
