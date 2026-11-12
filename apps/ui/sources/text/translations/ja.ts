@@ -6632,6 +6632,7 @@ localTailscale: {
         voiceRuntimeNoMachine: "音声を実行できるマシンがありません。先にセッションを開始してください。",
         voiceRuntimeUnavailable: "このマシンには音声ランタイムがインストールされていません。",
         voiceRuntimeStartFailed: "音声ランタイムを起動できませんでした。",
+        voiceRuntimeStopFailed: "マシン上で音声ランタイムがまだ動作している可能性があります。",
         generic: "音声で問題が発生しました。",
     },
     a11y: {

@@ -13,7 +13,7 @@ import { findVoiceConversationSessionId } from '@/voice/sessionBinding/voiceConv
 import { voiceAgentSessions } from '@/voice/agent/voiceAgentSessions';
 import { speakAssistantText, type VoiceSpeechOutput } from '@/voice/output/speakAssistantText';
 import { resolveVoiceNetworkTimeoutMs } from '@/voice/runtime/fetchWithTimeout';
-import { createVoicePlaybackController } from '@/voice/runtime/VoicePlaybackController';
+import { createVoicePlaybackController, type VoicePlaybackController } from '@/voice/runtime/VoicePlaybackController';
 import { voiceActivityController } from '@/voice/activity/voiceActivityController';
 import { resetVoiceAgentPersistenceState } from '@/voice/persistence/resetVoiceAgentPersistenceState';
 import { appendVoiceConversationAssistantText } from '@/voice/sessionBinding/voiceConversationTranscript';
@@ -349,6 +349,14 @@ export async function runLocalVoiceTextTurn(params: Readonly<{
 /** The user talked over the reply: drop what is still queued for this turn and stop what plays. */
 export function interruptLocalVoicePlayback(): void {
   playbackController.interrupt();
+}
+
+/**
+ * The engine's playback controller, for turns dispatched outside it (a typed turn during a call)
+ * that its interruptions must still reach.
+ */
+export function localVoicePlaybackController(): VoicePlaybackController {
+  return playbackController;
 }
 
 async function runAbortableVoiceTurn(sessionId: string, runner: (signal: AbortSignal) => Promise<void>): Promise<void> {

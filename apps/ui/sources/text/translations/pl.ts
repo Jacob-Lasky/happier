@@ -6377,6 +6377,7 @@ export const pl: TranslationStructure = {
         voiceRuntimeNoMachine: "Brak dostępnej maszyny do obsługi głosu. Najpierw rozpocznij sesję.",
         voiceRuntimeUnavailable: "Środowisko głosowe nie jest zainstalowane na tej maszynie.",
         voiceRuntimeStartFailed: "Nie udało się uruchomić środowiska głosowego.",
+        voiceRuntimeStopFailed: "Środowisko głosowe może nadal działać na twojej maszynie.",
         generic: "Wystąpił problem z głosem.",
     },
     a11y: {

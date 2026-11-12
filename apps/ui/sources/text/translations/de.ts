@@ -6003,6 +6003,7 @@ export const de: TranslationStructure = {
             voiceRuntimeNoMachine: "Kein Rechner verfügbar, um die Sprache auszuführen. Starte zuerst eine Sitzung.",
             voiceRuntimeUnavailable: "Die Sprach-Runtime ist auf diesem Rechner nicht installiert.",
             voiceRuntimeStartFailed: "Die Sprach-Runtime konnte nicht starten.",
+            voiceRuntimeStopFailed: "Die Sprach-Runtime läuft auf deinem Rechner möglicherweise noch.",
             generic: "Bei der Sprachfunktion ist ein Problem aufgetreten.",
         },
         a11y: {

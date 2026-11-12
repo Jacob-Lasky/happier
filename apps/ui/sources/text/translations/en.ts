@@ -6024,6 +6024,7 @@ export const en = {
             voiceRuntimeNoMachine: "No machine is available to run voice. Start a session first.",
             voiceRuntimeUnavailable: "The voice runtime isn't installed on this machine.",
             voiceRuntimeStartFailed: "The voice runtime couldn't start.",
+            voiceRuntimeStopFailed: "The voice runtime on your machine may still be running.",
             generic: "Voice ran into a problem.",
         },
         a11y: {

@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Boundaries: the platform's WebRTC (fake peer connection below), the machine RPC to the daemon,
 // microphone permission, settings decryption and the session → machine lookup. The local voice
 // engine seam is stubbed like the local conversation adapter's spec does; the RTVI client is real.
+const enginePlaybackController = { captureEpoch: () => 0, isEpochCurrent: () => true, interrupt: vi.fn(), registerStopper: () => () => {} };
+let localVoiceStateView: () => any = () => ({ status: 'idle', sessionId: null, error: null, errorMessage: null });
 const runLocalVoiceTextTurn = vi.fn(async (_params: { sessionId: string; text: string; speechOutput: unknown }) => {});
 const interruptLocalVoicePlayback = vi.fn();
 const stopLocalVoiceSession = vi.fn(async () => {});
-const machineVoiceRuntimeStart = vi.fn(async (_machineId: string, _request: any, _opts?: any): Promise<any> => ({
-  ok: true,
-  answer: { type: 'answer', sdp: 'v=0 answer' },
-}));
+// Like the real transport, the start reports issuance just before it is emitted.
+const startAnswered = async (_machineId: string, _request: any, opts?: any): Promise<any> => {
+  opts?.onIssued?.();
+  return { ok: true, answer: { type: 'answer', sdp: 'v=0 answer' } };
+};
+const machineVoiceRuntimeStart = vi.fn(startAnswered);
 const machineVoiceRuntimeStop = vi.fn(async (_machineId: string, _sessionKey: string): Promise<any> => ({ ok: true }));
 
 const state: any = {
@@ -51,7 +55,12 @@ const peer = Object.assign(new FakeTarget(), {
   addTrack: () => {},
   createOffer: async () => ({ type: 'offer', sdp: 'v=0 offer' }),
   setLocalDescription: async (description: { sdp: string }) => { peer.localDescription = description; },
-  setRemoteDescription: async () => {},
+  setRemoteDescription: async () => {
+    queueMicrotask(() => {
+      channel.readyState = 'open';
+      channel.emit('open');
+    });
+  },
   close: () => {},
 });
 
@@ -62,7 +71,8 @@ vi.mock('@/sync/domains/state/storage', async () => {
 vi.mock('@/voice/local/localVoiceEngine', () => ({
   abortLocalVoiceTurn: vi.fn(async () => {}),
   appendLocalVoiceAgentContextUpdate: vi.fn(),
-  getLocalVoiceState: () => ({ status: 'idle', sessionId: null, error: null, errorMessage: null }),
+  getLocalVoiceState: () => localVoiceStateView(),
+  localVoicePlaybackController: () => enginePlaybackController,
   interruptLocalVoicePlayback,
   runLocalVoiceTextTurn,
   stopLocalVoiceSession,
@@ -97,6 +107,8 @@ describe('realtime Pipecat voice adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     channel.sent.length = 0;
+    channel.readyState = 'connecting';
+    localVoiceStateView = () => ({ status: 'idle', sessionId: null, error: null, errorMessage: null });
   });
 
   it('runs each heard user turn through the local conversation with the runtime speaking the reply', async () => {
@@ -129,7 +141,10 @@ describe('realtime Pipecat voice adapter', () => {
   });
 
   it('releases the runtime it asked for when the daemon refuses to start one', async () => {
-    machineVoiceRuntimeStart.mockResolvedValueOnce({ ok: false, errorCode: 'voice_runtime_unavailable', error: 'voice_runtime_unavailable' });
+    machineVoiceRuntimeStart.mockImplementationOnce(async (_machineId: string, _request: any, opts?: any) => {
+      opts?.onIssued?.();
+      return { ok: false, errorCode: 'voice_runtime_unavailable', error: 'voice_runtime_unavailable' };
+    });
     const { createRealtimePipecatVoiceAdapter } = await import('./realtimePipecatAdapter');
     const adapter = createRealtimePipecatVoiceAdapter();
     await adapter.start({ sessionId: 'session-1' });
@@ -156,7 +171,10 @@ describe('realtime Pipecat voice adapter', () => {
 
   it('releases a runtime whose start was still running on the daemon when the call ended', async () => {
     let answer: (value: unknown) => void = () => {};
-    machineVoiceRuntimeStart.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    machineVoiceRuntimeStart.mockImplementationOnce((_machineId: string, _request: any, opts?: any) => {
+      opts?.onIssued?.();
+      return new Promise((resolve) => { answer = resolve; });
+    });
     const { createRealtimePipecatVoiceAdapter } = await import('./realtimePipecatAdapter');
     const adapter = createRealtimePipecatVoiceAdapter();
     const starting = adapter.start({ sessionId: 'session-1' });
@@ -208,5 +226,57 @@ describe('realtime Pipecat voice adapter', () => {
     await createRealtimePipecatVoiceAdapter().start({ sessionId: 'session-1' });
     unsubscribe();
     expect(patches.at(-1)).toMatchObject({ error: 'voice_runtime_unavailable' });
+  });
+
+  it('does not ask the daemon to stop a runtime whose start was never sent', async () => {
+    machineVoiceRuntimeStart.mockRejectedValueOnce(new Error('Machine RPC timed out'));
+    const { createRealtimePipecatVoiceAdapter } = await import('./realtimePipecatAdapter');
+    await createRealtimePipecatVoiceAdapter().start({ sessionId: 'session-1' });
+    expect(machineVoiceRuntimeStop).not.toHaveBeenCalled();
+  });
+
+  it('marks the start as sent through the transport issuance fence and stops what it sent', async () => {
+    machineVoiceRuntimeStart.mockImplementationOnce(async (_machineId: string, _request: any, opts?: any) => {
+      opts?.onIssued?.();
+      throw new Error('Machine RPC timed out');
+    });
+    const { createRealtimePipecatVoiceAdapter } = await import('./realtimePipecatAdapter');
+    await createRealtimePipecatVoiceAdapter().start({ sessionId: 'session-1' });
+    const sessionKey = machineVoiceRuntimeStart.mock.calls[0]?.[1]?.sessionKey;
+    expect(machineVoiceRuntimeStop).toHaveBeenCalledWith('machine-1', sessionKey);
+  });
+
+  it('shows when the daemon could not confirm the runtime stopped', async () => {
+    machineVoiceRuntimeStop.mockResolvedValueOnce({ ok: false, errorCode: 'voice_runtime_stop_failed', error: 'voice_runtime_stop_failed' });
+    const localState = await import('@/voice/local/localVoiceState');
+    const { createRealtimePipecatVoiceAdapter } = await import('./realtimePipecatAdapter');
+    const adapter = createRealtimePipecatVoiceAdapter();
+    await adapter.start({ sessionId: 'session-1' });
+    await adapter.stop({ sessionId: 'session-1' });
+    await vi.waitFor(() => expect(localState.getLocalVoiceState().error).toBe('voice_runtime_stop_failed'));
+  });
+
+  it('never speaks a turn from an ended call into the next one, and lets the call interrupt typed turns', async () => {
+    const { createRealtimePipecatVoiceAdapter } = await import('./realtimePipecatAdapter');
+    const adapter = createRealtimePipecatVoiceAdapter();
+    await adapter.start({ sessionId: 'session-1' });
+    runtimeSays({ type: 'server-message', data: { type: 'happier.user_turn', text: 'first call' } });
+    const firstCallOutput = runLocalVoiceTextTurn.mock.calls[0]?.[0]?.speechOutput as { speak: (p: any) => Promise<void> };
+    await adapter.stop({ sessionId: 'session-1' });
+
+    channel.readyState = 'connecting';
+    await adapter.start({ sessionId: 'session-1' });
+    const sentBefore = channel.sent.length;
+    await firstCallOutput.speak({ text: 'late reply', registerPlaybackStopper: () => () => {}, onSpeaking: () => {} });
+    expect(channel.sent.length).toBe(sentBefore);
+
+    state.settings.voice.adapters.local_conversation.conversationMode = 'agent';
+    try {
+      await adapter.sendTextTurn?.({ controlSessionId: 'c', conversationSessionId: 'v', text: 'typed', localId: 'l', handoffMode: 'interrupt_and_send' });
+      expect(sendVoiceTextTurn).toHaveBeenLastCalledWith(expect.objectContaining({ playbackController: enginePlaybackController }));
+    } finally {
+      state.settings.voice.adapters.local_conversation.conversationMode = 'direct_session';
+    }
+    await adapter.stop({ sessionId: 'session-1' });
   });
 });

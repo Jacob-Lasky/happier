@@ -6002,6 +6002,7 @@ deps: {
               voiceRuntimeNoMachine: "No hi ha cap màquina disponible per executar la veu. Primer inicia una sessió.",
               voiceRuntimeUnavailable: "El runtime de veu no està instal·lat en aquesta màquina.",
               voiceRuntimeStartFailed: "No s'ha pogut iniciar el runtime de veu.",
+              voiceRuntimeStopFailed: "És possible que el runtime de veu encara s'estigui executant a la teva màquina.",
               generic: "La veu ha tingut un problema.",
           },
 	          a11y: {

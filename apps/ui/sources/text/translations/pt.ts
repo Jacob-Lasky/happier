@@ -6474,6 +6474,7 @@ export const pt: TranslationStructure = {
         voiceRuntimeNoMachine: "Nenhuma máquina está disponível para a voz. Inicie uma sessão primeiro.",
         voiceRuntimeUnavailable: "O runtime de voz não está instalado nesta máquina.",
         voiceRuntimeStartFailed: "Não foi possível iniciar o runtime de voz.",
+        voiceRuntimeStopFailed: "O runtime de voz pode ainda estar em execução na sua máquina.",
         generic: "A voz encontrou um problema.",
     },
     a11y: {

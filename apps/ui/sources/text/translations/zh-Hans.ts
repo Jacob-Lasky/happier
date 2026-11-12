@@ -6162,6 +6162,7 @@ export const zhHans: TranslationStructure = {
         voiceRuntimeNoMachine: "没有可运行语音的机器。请先开始一个会话。",
         voiceRuntimeUnavailable: "此机器未安装语音运行时。",
         voiceRuntimeStartFailed: "语音运行时无法启动。",
+        voiceRuntimeStopFailed: "你机器上的语音运行时可能仍在运行。",
         generic: "语音出现问题。",
     },
     a11y: {

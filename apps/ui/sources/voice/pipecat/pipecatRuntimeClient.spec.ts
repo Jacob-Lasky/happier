@@ -56,6 +56,10 @@ class FakePeerConnection extends FakeEventTarget {
   }
   async setRemoteDescription(description: { type: string; sdp: string }) {
     this.remoteDescription = description;
+    // As with a real peer, the data channel opens once the connection is established.
+    queueMicrotask(() => {
+      if (this.channel.readyState === 'connecting') this.channel.open();
+    });
   }
   close() {
     this.closed = true;
@@ -98,7 +102,6 @@ describe('connectPipecatRuntime', () => {
     expect(offers).toEqual(['v=0 offer']);
     expect(pc.remoteDescription).toEqual({ type: 'answer', sdp: 'v=0 answer' });
 
-    pc.channel.open();
     expect(sentMessages(pc.channel)[0]).toMatchObject({ label: 'rtvi-ai', type: 'client-ready' });
     vi.advanceTimersByTime(2_500);
     expect(pc.channel.sent.filter((data) => data.startsWith('ping')).length).toBeGreaterThanOrEqual(2);
@@ -115,7 +118,6 @@ describe('connectPipecatRuntime', () => {
       onEvent: (event) => events.push(event),
       negotiate: async () => 'v=0 answer',
     });
-    pc.channel.open();
 
     pc.channel.receive({ label: 'rtvi-ai', type: 'server-message', data: { type: 'happier.user_turn', text: 'run the tests' } });
     pc.channel.receive({ label: 'rtvi-ai', type: 'bot-started-speaking' });
@@ -142,7 +144,6 @@ describe('connectPipecatRuntime', () => {
       onEvent: () => {},
       negotiate: async () => 'v=0 answer',
     });
-    pc.channel.open();
 
     client.speak(4, 'Done.', true);
     client.cancel(4);
@@ -226,6 +227,50 @@ describe('connectPipecatRuntime', () => {
     openMicrophone();
     await expect(connecting).rejects.toThrow('call ended');
     expect(negotiate).not.toHaveBeenCalled();
+    expect(track.stopped).toBe(true);
+  });
+
+  it('reports connected only once the data channel is open, and fails speech on a closed channel', async () => {
+    const { pc, platform } = createPlatform();
+    pc.setRemoteDescription = async (description) => {
+      pc.remoteDescription = description;
+    };
+    let connected = false;
+    const connecting = connectPipecatRuntime({
+      platform,
+      iceServers: [],
+      signal: new AbortController().signal,
+      onEvent: () => {},
+      negotiate: async () => 'v=0 answer',
+    }).then((client) => {
+      connected = true;
+      return client;
+    });
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(connected).toBe(false);
+    pc.channel.open();
+    const client = await connecting;
+    pc.channel.readyState = 'closed';
+    expect(() => client.speak(1, 'hello', true)).toThrow('voice_runtime_disconnected');
+    expect(() => client.cancel(1)).not.toThrow();
+    client.close();
+  });
+
+  it('releases the microphone when the peer connection cannot be set up', async () => {
+    const { platform, track } = createPlatform();
+    const broken: PipecatPlatform = {
+      ...platform,
+      createPeerConnection: () => {
+        throw new Error('webrtc_unavailable');
+      },
+    };
+    await expect(connectPipecatRuntime({
+      platform: broken,
+      iceServers: [],
+      signal: new AbortController().signal,
+      onEvent: () => {},
+      negotiate: async () => 'v=0 answer',
+    })).rejects.toThrow('webrtc_unavailable');
     expect(track.stopped).toBe(true);
   });
 });

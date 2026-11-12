@@ -6910,6 +6910,7 @@ export const ru: TranslationStructure = {
               voiceRuntimeNoMachine: "Нет машины для работы голоса. Сначала начните сессию.",
               voiceRuntimeUnavailable: "Голосовая среда не установлена на этой машине.",
               voiceRuntimeStartFailed: "Не удалось запустить голосовую среду.",
+              voiceRuntimeStopFailed: "Голосовая среда на вашей машине, возможно, всё ещё работает.",
               generic: "В работе голоса возникла проблема.",
           },
           a11y: {

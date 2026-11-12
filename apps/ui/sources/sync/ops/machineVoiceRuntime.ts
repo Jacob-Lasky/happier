@@ -16,6 +16,15 @@ type MachineVoiceRuntimeOpts = Readonly<{
     timeoutMs?: number | null;
 }>;
 
+type MachineVoiceRuntimeStartOpts = MachineVoiceRuntimeOpts & Readonly<{
+    /**
+     * Called just before the start request is emitted. The transport fences an attempt it gave up
+     * on before emission, so a start never sent is never sent later; one that was sent may have
+     * started a runtime and needs a stop.
+     */
+    onIssued?: () => void;
+}>;
+
 function throwUnsupportedResponse(method: string): never {
     throw new Error(`Unsupported response from machine RPC (${method})`);
 }
@@ -24,7 +33,7 @@ function throwUnsupportedResponse(method: string): never {
 export async function machineVoiceRuntimeStart(
     machineId: string,
     input: DaemonVoiceRuntimeStartRequest,
-    opts?: MachineVoiceRuntimeOpts,
+    opts?: MachineVoiceRuntimeStartOpts,
 ): Promise<DaemonVoiceRuntimeStartResponse> {
     const payload = DaemonVoiceRuntimeStartRequestSchema.parse(input);
     const response = await machineRpcWithServerScope<unknown, DaemonVoiceRuntimeStartRequest>({
@@ -33,6 +42,7 @@ export async function machineVoiceRuntimeStart(
         timeoutMs: opts?.timeoutMs ?? undefined,
         method: RPC_METHODS.DAEMON_VOICE_RUNTIME_START,
         payload,
+        ...(opts?.onIssued ? { onIssued: opts.onIssued } : {}),
     });
     const parsed = DaemonVoiceRuntimeStartResponseSchema.safeParse(response);
     if (!parsed.success) throwUnsupportedResponse(RPC_METHODS.DAEMON_VOICE_RUNTIME_START);

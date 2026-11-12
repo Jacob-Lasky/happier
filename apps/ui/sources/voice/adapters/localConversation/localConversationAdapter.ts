@@ -12,7 +12,7 @@ import { VOICE_AGENT_GLOBAL_SESSION_ID } from '@/voice/agent/voiceAgentGlobalSes
 import { voiceAgentSessions } from '@/voice/agent/voiceAgentSessions';
 import type { VoiceAdapterController, VoiceSessionMode, VoiceSessionSnapshot, VoiceSessionStatus } from '@/voice/session/types';
 import { voiceSessionBindingManager } from '@/voice/sessionBinding/voiceSessionBindingRuntime';
-import { createVoicePlaybackController } from '@/voice/runtime/VoicePlaybackController';
+import { createVoicePlaybackController, type VoicePlaybackController } from '@/voice/runtime/VoicePlaybackController';
 import type { VoiceSpeechOutput } from '@/voice/output/speakAssistantText';
 
 function mapLocalStatus(status: any): { status: VoiceSessionStatus; mode: VoiceSessionMode } {
@@ -36,11 +36,12 @@ function mapLocalStatus(status: any): { status: VoiceSessionStatus; mode: VoiceS
 /**
  * A turn typed into a voice conversation, dispatched durably to its voice agent. Shared by every
  * provider whose turns run through the local conversation; `speechOutput` speaks the reply through
- * the provider's own speech instead of local TTS.
+ * the provider's own speech instead of local TTS, under the provider's playback controller so its
+ * interruptions reach typed replies too.
  */
 export async function sendLocalConversationTextTurn(
   opts: Parameters<NonNullable<VoiceAdapterController['sendTextTurn']>>[0],
-  speechOutput?: VoiceSpeechOutput,
+  speech?: Readonly<{ output: VoiceSpeechOutput; playbackController: VoicePlaybackController }>,
 ): Promise<void> {
   const settings: any = storage.getState().settings;
   const config = settings?.voice?.adapters?.local_conversation ?? {};
@@ -52,13 +53,13 @@ export async function sendLocalConversationTextTurn(
     sessionId: opts.controlSessionId,
     settings,
     userText: opts.text,
-    playbackController: createVoicePlaybackController(),
+    playbackController: speech?.playbackController ?? createVoicePlaybackController(),
     voiceAgentSessions,
     durableDispatch: {
       localId: opts.localId,
       handoffMode: opts.handoffMode,
     },
-    ...(speechOutput ? { speechOutput } : {}),
+    ...(speech ? { speechOutput: speech.output } : {}),
   });
 }
 

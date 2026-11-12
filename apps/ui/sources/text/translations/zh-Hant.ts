@@ -1018,6 +1018,7 @@ const zhHantOverrides: DeepPartial<TranslationStructure> = {
             voiceRuntimeNoMachine: "沒有可執行語音的機器。請先開始一個工作階段。",
             voiceRuntimeUnavailable: "此機器未安裝語音執行環境。",
             voiceRuntimeStartFailed: "語音執行環境無法啟動。",
+            voiceRuntimeStopFailed: "你機器上的語音執行環境可能仍在執行。",
             generic: "語音發生問題。",
         },
 	        a11y: {

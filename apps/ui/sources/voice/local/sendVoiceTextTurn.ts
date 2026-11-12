@@ -49,6 +49,14 @@ type VoiceAgentSessionsLike = Readonly<{
   ) => Promise<{ assistantText: string; actions?: ReadonlyArray<unknown> }>;
 }>;
 
+/**
+ * Local TTS honours the Local voice auto-speak preference. A session speech output (Pipecat) is a
+ * spoken conversation by definition, and that preference is not shown for it, so it always speaks.
+ */
+function shouldSpeakReplies(config: Readonly<{ tts?: { autoSpeakReplies?: boolean } }> | null | undefined, speechOutput: VoiceSpeechOutput | undefined): boolean {
+  return speechOutput !== undefined || config?.tts?.autoSpeakReplies !== false;
+}
+
 export async function sendVoiceTextTurn(params: {
   sessionId: string;
   settings: any;
@@ -152,7 +160,7 @@ export async function sendVoiceTextTurn(params: {
     }
     // Whether a provider can actually speak (configured key/base URL) is decided by the canonical
     // TTS runtime behind speakAssistantText; this turn only honours the auto-speak preference.
-    const autoSpeak = config?.tts?.autoSpeakReplies !== false;
+    const autoSpeak = shouldSpeakReplies(config, params.speechOutput);
     const streamingSpeechEnabled =
       autoSpeak && config?.streaming?.enabled === true && config?.streaming?.ttsEnabled === true;
     const streamingChunkChars = resolveStreamingTtsChunkChars(config?.streaming?.ttsChunkChars);
@@ -263,6 +271,8 @@ export async function sendVoiceTextTurn(params: {
   }
 
   const baseline = captureSessionTurnBaseline(sessionId);
+  // A barge-in while the reply is pending advances the epoch; that reply is then not spoken.
+  const playbackEpoch = params.playbackController.captureEpoch();
   let submittedUserLocalId: string | undefined;
 
   patchLocalVoiceState({ status: 'sending' });
@@ -279,7 +289,7 @@ export async function sendVoiceTextTurn(params: {
     throw error;
   }
 
-  const autoSpeak = config?.tts?.autoSpeakReplies !== false;
+  const autoSpeak = shouldSpeakReplies(config, params.speechOutput);
   if (!autoSpeak) {
     patchLocalVoiceState({ status: 'idle', sessionId, error: null });
     return;
@@ -289,7 +299,7 @@ export async function sendVoiceTextTurn(params: {
   // turn lifecycle and by the voice turn's abort signal (cancel / hang-up), not by a fixed timeout.
   const assistantText = await waitForTurnFinalAssistantText({ sessionId, baseline, signal: params.signal, submittedUserLocalId });
   if (params.signal?.aborted) return;
-  if (!assistantText) {
+  if (!assistantText || !params.playbackController.isEpochCurrent(playbackEpoch)) {
     patchLocalVoiceState({ status: 'idle', sessionId, error: null });
     return;
   }

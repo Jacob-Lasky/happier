@@ -110,8 +110,40 @@ function waitForIceGathering(pc: RTCPeerConnection, signal: AbortSignal): Promis
   });
 }
 
+function waitForChannelOpen(pc: RTCPeerConnection, channel: RTCDataChannel, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  if (channel.readyState === 'open') return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const done = () => {
+      channel.removeEventListener('open', onOpen);
+      channel.removeEventListener('close', onClosed);
+      pc.removeEventListener('connectionstatechange', onState);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onOpen = () => {
+      done();
+      resolve();
+    };
+    const onClosed = () => {
+      done();
+      reject(new Error('voice_runtime_disconnected'));
+    };
+    const onState = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') onClosed();
+    };
+    const onAbort = () => {
+      done();
+      reject(abortReason(signal));
+    };
+    channel.addEventListener('open', onOpen);
+    channel.addEventListener('close', onClosed);
+    pc.addEventListener('connectionstatechange', onState);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 /**
- * Connects to a runtime. Resolves once the runtime has answered and the connection is set up;
+ * Connects to a runtime. Resolves once the runtime has answered and its data channel is open;
  * `onEvent` then reports what the runtime hears and says. Rejects (and releases the microphone)
  * if the offer, `negotiate` or the answer fails, or `signal` aborts first.
  */
@@ -123,21 +155,19 @@ export async function connectPipecatRuntime(params: Readonly<{
   signal: AbortSignal;
 }>): Promise<PipecatRuntimeClient> {
   const microphone = await params.platform.getMicrophone();
-  if (params.signal.aborted) {
-    for (const track of microphone.getTracks()) track.stop();
-    throw abortReason(params.signal);
-  }
-  const pc = params.platform.createPeerConnection({ iceServers: [...params.iceServers] });
-  const channel = pc.createDataChannel('chat', { ordered: true });
+  let pc: RTCPeerConnection | null = null;
+  let channel: RTCDataChannel | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   let stopRemoteAudio: (() => void) | null = null;
   let closed = false;
   let messageCounter = 0;
 
-  const send = (type: string, data: unknown) => {
-    if (channel.readyState !== 'open') return;
+  /** False when the data channel is not open: the message was not sent. */
+  const send = (type: string, data: unknown): boolean => {
+    if (!channel || channel.readyState !== 'open') return false;
     messageCounter += 1;
     channel.send(JSON.stringify({ label: 'rtvi-ai', type, id: `happier-${messageCounter}`, data }));
+    return true;
   };
 
   const close = () => {
@@ -149,11 +179,11 @@ export async function connectPipecatRuntime(params: Readonly<{
     stopRemoteAudio = null;
     for (const track of microphone.getTracks()) track.stop();
     try {
-      channel.close();
+      channel?.close();
     } catch {
       // Already closed by the peer.
     }
-    pc.close();
+    pc?.close();
   };
 
   const onDisconnected = () => {
@@ -163,27 +193,32 @@ export async function connectPipecatRuntime(params: Readonly<{
   };
 
   try {
-    for (const track of microphone.getAudioTracks()) pc.addTrack(track, microphone);
+    if (params.signal.aborted) throw abortReason(params.signal);
+    pc = params.platform.createPeerConnection({ iceServers: [...params.iceServers] });
+    channel = pc.createDataChannel('chat', { ordered: true });
+    const peer = pc;
+    const dataChannel = channel;
+    for (const track of microphone.getAudioTracks()) peer.addTrack(track, microphone);
 
-    pc.addEventListener('track', (event: RTCTrackEvent) => {
+    peer.addEventListener('track', (event: RTCTrackEvent) => {
       if (event.track.kind !== 'audio' || stopRemoteAudio) return;
       stopRemoteAudio = params.platform.playRemoteAudio(event.streams[0] ?? new MediaStream([event.track]));
     });
-    pc.addEventListener('connectionstatechange', () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') onDisconnected();
+    peer.addEventListener('connectionstatechange', () => {
+      if (peer.connectionState === 'failed' || peer.connectionState === 'closed') onDisconnected();
     });
 
-    channel.addEventListener('open', () => {
+    dataChannel.addEventListener('open', () => {
       send('client-ready', {
         version: RTVI_PROTOCOL_VERSION,
         about: { library: 'happier', library_version: '1', platform: 'happier-app' },
       });
       keepalive = setInterval(() => {
-        if (channel.readyState === 'open') channel.send(`ping: ${Date.now()}`);
+        if (dataChannel.readyState === 'open') dataChannel.send(`ping: ${Date.now()}`);
       }, KEEPALIVE_INTERVAL_MS);
     });
-    channel.addEventListener('close', onDisconnected);
-    channel.addEventListener('message', (event: MessageEvent) => {
+    dataChannel.addEventListener('close', onDisconnected);
+    dataChannel.addEventListener('message', (event: MessageEvent) => {
       if (typeof event.data !== 'string') return;
       let message: RtviMessage;
       try {
@@ -196,22 +231,31 @@ export async function connectPipecatRuntime(params: Readonly<{
       if (runtimeEvent) params.onEvent(runtimeEvent);
     });
 
-    await pc.setLocalDescription(await pc.createOffer());
-    await waitForIceGathering(pc, params.signal);
-    const offerSdp = pc.localDescription?.sdp;
+    await peer.setLocalDescription(await peer.createOffer());
+    await waitForIceGathering(peer, params.signal);
+    const offerSdp = peer.localDescription?.sdp;
     if (!offerSdp) throw new Error('voice_runtime_offer_failed');
     if (params.signal.aborted) throw abortReason(params.signal);
     const answerSdp = await params.negotiate(offerSdp);
     if (params.signal.aborted) throw abortReason(params.signal);
-    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    // Connected means the runtime can be spoken to: until the channel opens, speech would be lost.
+    await waitForChannelOpen(peer, dataChannel, params.signal);
   } catch (error) {
     close();
     throw error;
   }
 
   return {
-    speak: (seq, text, final) => send('client-message', { t: 'happier.speak', d: { seq, text, final } }),
-    cancel: (seq) => send('client-message', { t: 'happier.cancel', d: { seq } }),
+    speak: (seq, text, final) => {
+      if (!send('client-message', { t: 'happier.speak', d: { seq, text, final } })) {
+        throw new Error('voice_runtime_disconnected');
+      }
+    },
+    // Nothing is playing on a closed channel, so there is nothing to cancel.
+    cancel: (seq) => {
+      send('client-message', { t: 'happier.cancel', d: { seq } });
+    },
     close,
   };
 }

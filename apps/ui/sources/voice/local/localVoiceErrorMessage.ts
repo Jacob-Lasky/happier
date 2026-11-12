@@ -32,6 +32,7 @@ const LOCAL_VOICE_ERROR_KEYS: Readonly<Record<string, TranslationKeyNoParams>> =
   voice_runtime_unavailable: 'voiceSurface.errors.voiceRuntimeUnavailable',
   voice_runtime_start_failed: 'voiceSurface.errors.voiceRuntimeStartFailed',
   voice_runtime_invalid_request: 'voiceSurface.errors.voiceRuntimeStartFailed',
+  voice_runtime_stop_failed: 'voiceSurface.errors.voiceRuntimeStopFailed',
 };
 
 /** Feature toggles (Settings → Features) the daemon voice agent depends on, by error code. */

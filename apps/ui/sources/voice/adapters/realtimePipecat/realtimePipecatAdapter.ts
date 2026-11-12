@@ -10,6 +10,7 @@ import {
   appendLocalVoiceAgentContextUpdate,
   getLocalVoiceState,
   interruptLocalVoicePlayback,
+  localVoicePlaybackController,
   runLocalVoiceTextTurn,
   stopLocalVoiceSession,
 } from '@/voice/local/localVoiceEngine';
@@ -41,7 +42,11 @@ type Connection = {
   readonly controlSessionId: string;
   readonly sessionKey: string;
   readonly abort: AbortController;
+  /** Speaks only into this call: once it ends, its remaining reply is dropped, never sent to the next. */
+  readonly speechOutput: VoiceSpeechOutput;
   machineId: string | null;
+  /** The start request was emitted (the transport fences one that was not), so a runtime may exist. */
+  startIssued: boolean;
 };
 
 /** Ends a start whose call was stopped (or replaced) while it awaited something. */
@@ -69,7 +74,7 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
   let userSpeaking = false;
   let botSpeaking = false;
   let snapshot: VoiceSessionSnapshot | null = null;
-  const speechOutput = createPipecatSpeechOutput(() => client);
+  const noCallSpeechOutput = createPipecatSpeechOutput(() => null);
 
   const computeSnapshot = (): VoiceSessionSnapshot => {
     const local = getLocalVoiceState();
@@ -114,9 +119,16 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
   };
 
   const releaseRuntime = (current: Connection) => {
-    // A runtime exists only once a machine was asked to start it (possibly still starting).
-    if (!current.machineId) return;
-    fireAndForget(machineVoiceRuntimeStop(current.machineId, current.sessionKey), { tag: 'realtimePipecat.stop' });
+    const machineId = current.machineId;
+    if (!machineId || !current.startIssued) return;
+    fireAndForget((async () => {
+      const result = await machineVoiceRuntimeStop(machineId, current.sessionKey);
+      // The daemon keeps a runtime it could not confirm stopped; say so instead of a clean hang-up.
+      if (!result.ok && result.errorCode === 'voice_runtime_stop_failed') {
+        patchLocalVoiceState({ error: 'voice_runtime_stop_failed', errorMessage: null });
+        notify();
+      }
+    })(), { tag: 'realtimePipecat.stop' });
   };
 
   const disconnect = async () => {
@@ -157,7 +169,7 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
         break;
       case 'user_turn':
         fireAndForget(
-          runLocalVoiceTextTurn({ sessionId: owner.controlSessionId, text: event.text, speechOutput }),
+          runLocalVoiceTextTurn({ sessionId: owner.controlSessionId, text: event.text, speechOutput: owner.speechOutput }),
           { tag: 'realtimePipecat.userTurn' },
         );
         break;
@@ -194,8 +206,10 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
     const owner: Connection = {
       controlSessionId,
       machineId: null,
+      startIssued: false,
       sessionKey: `pipecat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
       abort: new AbortController(),
+      speechOutput: createPipecatSpeechOutput(() => (connection === owner ? client : null)),
     };
     connection = owner;
     connecting = true;
@@ -239,7 +253,12 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
               },
               offer: { type: 'offer', sdp: offerSdp },
             },
-            { timeoutMs },
+            {
+              timeoutMs,
+              onIssued: () => {
+                owner.startIssued = true;
+              },
+            },
           );
           if (!response.ok) throw new VoiceRuntimeStartError(response.errorCode, response.runtimeCode);
           return response.answer.sdp;
@@ -289,10 +308,13 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
     if (current) await abortLocalVoiceTurn(current.controlSessionId);
   };
 
-  // Typed into the voice conversation: spoken by the runtime during a call, otherwise text only.
-  const silentSpeechOutput: VoiceSpeechOutput = { speak: async () => {} };
+  // Typed into the voice conversation: spoken by the runtime during a call (and interruptible like
+  // a spoken turn), otherwise text only.
   const sendTextTurn: NonNullable<VoiceAdapterController['sendTextTurn']> = (opts) =>
-    sendLocalConversationTextTurn(opts, client ? speechOutput : silentSpeechOutput);
+    sendLocalConversationTextTurn(opts, {
+      output: connection?.speechOutput ?? noCallSpeechOutput,
+      playbackController: localVoicePlaybackController(),
+    });
 
   const sendContextUpdate = (opts: Readonly<{ sessionId: string; update: string }>) => {
     const current = connection;
