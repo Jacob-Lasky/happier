@@ -14,7 +14,7 @@ import { settleReceivedSessionMessages } from '@/sync/engine/sessions/sessionMes
  */
 type SessionTurnMarker = Readonly<{
   latestTurnId: string | null;
-  latestTurnStatus: string | null;
+  latestTurnStatus: Session['latestTurnStatus'] | null;
   latestTurnStatusObservedAt: number | null;
 }>;
 
@@ -218,6 +218,41 @@ export function collectFinalAssistantReplySinceBaseline(
   return reply.length > 0 ? reply.join('\n\n') : null;
 }
 
+/**
+ * Whether a completed unanchored turn's reply has reached this client. Such producers (Claude) commit
+ * transcript text on a best-effort lane that turn lifecycle writes deliberately do not wait for
+ * (apps/cli `ApiSessionClient#enqueueMessageCommit`), so the completion can arrive before the reply.
+ * The reply is here once its text is, or once the producer's ready event, sent on that same lane
+ * after the reply, follows the submitted input; a turn that ended without text ends there too.
+ *
+ * Contract limit, until unanchored producers publish turn transcript anchors (as Codex does, which
+ * bound the reply exactly): the first reply text ends the wait, so a reply split over several
+ * messages whose later ones are still in flight is spoken in part; and local Claude publishes ready
+ * from its hook independently of its transcript scanner, so a lagging scanner can end the wait with
+ * no reply. Both only leave a reply unspoken or partly spoken, as before this check existed.
+ */
+function hasUnanchoredReplyArrived(
+  sessionId: string,
+  baseline: AssistantTextMessageBaseline,
+  submitted: SubmittedReplyBoundary,
+  submittedSeq: number | undefined,
+): boolean {
+  const readySeq = storage.getState().sessionMessages[sessionId]?.latestReadyEventSeq ?? null;
+  if (typeof submittedSeq === 'number' && typeof readySeq === 'number' && readySeq > submittedSeq) return true;
+  return collectFinalAssistantReplySinceBaseline(sessionId, baseline, submitted) !== null;
+}
+
+/**
+ * Whether the session has moved on from `turn`: a different turn id, or, on a status-only projection
+ * (no turn id), the turn running again or a different observation time, which is how that projection
+ * tells turns apart.
+ */
+function isLaterTurn(current: SessionTurnMarker | null, turn: SessionTurnMarker): boolean {
+  if (turn.latestTurnId !== null || current?.latestTurnId != null) return current?.latestTurnId !== turn.latestTurnId;
+  return !isTerminalPrimaryTurnStatus(current?.latestTurnStatus ?? null)
+    || current?.latestTurnStatusObservedAt !== turn.latestTurnStatusObservedAt;
+}
+
 function hasTurnProjection(marker: SessionTurnMarker | null): boolean {
   return marker !== null && (marker.latestTurnId !== null || marker.latestTurnStatus !== null);
 }
@@ -229,7 +264,8 @@ function hasTurnProjection(marker: SessionTurnMarker | null): boolean {
  * a turn already running at baseline. A different client's latest turn never supplies this binding.
  * Producers without input anchors retain the historical latest-turn/working compatibility path.
  * With that legacy session turn projection, the turn has ended when a terminal `latestTurnStatus` is
- * reported for a turn other than the one current at baseline. Sessions from producers without the
+ * reported for a turn other than the one current at baseline; a completed one has also delivered
+ * its reply (see `hasUnanchoredReplyArrived`). Sessions from producers without the
  * projection fall back to the canonical runtime `working` signal (observed working, then idle).
  * Before reading the reply, messages this client already received are settled through the
  * materialization barrier, because the socket apply coalescer may still hold the final text when
@@ -245,6 +281,9 @@ export async function waitForTurnFinalAssistantText(params: Readonly<{
   const { sessionId, baseline, signal, submittedUserLocalId } = params;
   let sawWorking = false;
   let submittedReply: SubmittedReplyBoundary | undefined;
+  let submittedSeq: number | undefined;
+  /** Our completed unanchored turn, while its reply is still on the way. */
+  let replyPendingTurn: SessionTurnMarker | null = null;
   const ended = await waitForStorageCondition(() => {
     const session = getSession(sessionId);
     if (submittedUserLocalId) {
@@ -253,10 +292,11 @@ export async function waitForTurnFinalAssistantText(params: Readonly<{
       // another client's reply while our admitted input is still pending or being materialized.
       if (!submitted) return { done: false };
       const turns = session?.sessionTurns?.turns ?? [];
-      const submittedSeq = submitted.seq;
-      const boundTurn = typeof submittedSeq === 'number' ? turns.find((turn) => (
-        turn.transcriptAnchors?.startUserMessageSeq === submittedSeq
-        || turn.transcriptAnchors?.userMessageSeqs?.includes(submittedSeq)
+      const seq = typeof submitted.seq === 'number' ? submitted.seq : undefined;
+      submittedSeq = seq;
+      const boundTurn = typeof seq === 'number' ? turns.find((turn) => (
+        turn.transcriptAnchors?.startUserMessageSeq === seq
+        || turn.transcriptAnchors?.userMessageSeqs?.includes(seq)
       )) : undefined;
       if (boundTurn) {
         if (!isTerminalPrimaryTurnStatus(boundTurn.status)) return { done: false };
@@ -286,11 +326,20 @@ export async function waitForTurnFinalAssistantText(params: Readonly<{
     }
     const current = readSessionTurnMarker(session);
     if (hasTurnProjection(current) || hasTurnProjection(baseline.turnMarker)) {
+      // A newer turn began before our reply arrived (queued work also holds back the ready event);
+      // whatever it answers is not ours.
+      if (replyPendingTurn && isLaterTurn(current, replyPendingTurn)) return { done: true, value: null };
       const isNewTurn = current?.latestTurnId !== null || baseline.turnMarker?.latestTurnId != null
         ? current?.latestTurnId !== (baseline.turnMarker?.latestTurnId ?? null)
         : current?.latestTurnStatusObservedAt !== (baseline.turnMarker?.latestTurnStatusObservedAt ?? null);
       const isTerminal = isTerminalPrimaryTurnStatus(session.latestTurnStatus ?? null);
-      return isNewTurn && isTerminal ? { done: true, value: 'ended' } : { done: false };
+      if (!isNewTurn || !isTerminal) return { done: false };
+      // A cancelled or failed turn may never publish a reply; a completed one has one on its way.
+      const replyPending = session.latestTurnStatus === 'completed' && submittedReply !== undefined
+        && !hasUnanchoredReplyArrived(sessionId, baseline, submittedReply, submittedSeq);
+      if (!replyPending) return { done: true, value: 'ended' };
+      replyPendingTurn = current;
+      return { done: false };
     }
     if (isSessionTurnWorking(session)) {
       sawWorking = true;

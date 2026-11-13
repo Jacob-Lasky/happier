@@ -344,23 +344,27 @@ test.describe('ui e2e: Pipecat voice (live)', () => {
           body: new Uint8Array(audio),
         })).json() as { results: { channels: Array<{ alternatives: Array<{ transcript: string }> }> } };
         const transcript = result.results.channels[0]?.alternatives[0]?.transcript ?? '';
+        const spokenByRuntime = (await readClientLog(page)).filter((line) => line.includes('happier.speak'));
         await writeFile(join(testDir, 'proof.json'), JSON.stringify({
           spokenRequest: SPOKEN_REQUEST,
           sessionId: session.sessionId,
           botAudioBytes: audio.length,
           botAudioTranscript: transcript,
-          spokenByRuntime: (await readClientLog(page)).filter((line) => line.includes('happier.speak')),
+          spokenByRuntime,
           timeline,
         }, null, 2));
-        // The reply is the fake agent's `FAKE_CLAUDE_OK_<n>` token, a poor sample for checking what
-        // TTS said word by word (STT reads it back as "Fake Claude OK", "Fake Claudio", "Claudio";
-        // natural sentences are checked exactly by apps/voice-runtime/scripts/live_roundtrip.py).
-        // This proves the runtime's speech of the session's reply reached the browser.
-        expect(transcript).toMatch(/claud/i);
+        // The session's reply went to the runtime to be spoken, exactly as the session wrote it...
+        expect(spokenByRuntime.some((line) => line.includes('"FAKE_CLAUDE_OK_2"'))).toBe(true);
+        // ...and the runtime's speech of it reached the browser. The fake agent's code token is a poor
+        // sample for checking TTS word by word (STT reads it back as "Fake Claude OK", "Claudio", "The
+        // Glatio"), so only speech is required here; the next step checks a natural sentence exactly.
+        expect(transcript.trim().length).toBeGreaterThan(0);
       });
 
       await test.step('hear a natural sentence spoken by the runtime, word for word', async () => {
-        const sentence = 'This is Happier speaking through the open source Pipecat runtime.';
+        // Ordinary words only: STT may split a coined name ("Pipecat" came back as "pipe cat"), which is
+        // not what this step checks.
+        const sentence = 'This is Happier speaking through the open source voice runtime on your machine.';
         const audio = await recordRuntimeSpeaking(page, sentence);
         await writeFile(join(testDir, 'sentence-audio.webm'), audio);
         const result = await (await deepgram('/v1/listen?model=nova-3&smart_format=true', {

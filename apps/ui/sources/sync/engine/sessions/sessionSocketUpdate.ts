@@ -100,6 +100,17 @@ function shouldApplyLifecycleLatestTurnStatus(params: Readonly<{
         && params.lifecycleEvent.createdAt > params.session.updatedAt;
 }
 
+/**
+ * The server's turn projection (turn mutations) owns `latestTurnId`, `latestTurnStatus` and
+ * `latestTurnStatusObservedAt` once it has published a turn id. Transcript lifecycle rows carry no
+ * turn id, so they infer the turn status only for producers that publish no turn projection. DO NOT
+ * let them write it after that: their message time would out-order the server's own updates for the
+ * next turn, dropping its id and stranding the session on the previous turn (W330, 2026-11-12).
+ */
+function isTurnProjectionOwnedByServer(session: Session): boolean {
+    return typeof session.latestTurnId === 'string' && session.latestTurnId.length > 0;
+}
+
 type HandleSessionMessageSocketUpdateParams = {
     updateData: any;
     getSessionEncryption: (sessionId: string) => SessionMessageEncryption | null;
@@ -561,7 +572,7 @@ async function handleSessionMessageSocketUpdate(params: HandleSessionMessageSock
                 const lifecyclePatch: Partial<Session> = {
                     ...(shouldInferLifecycle && isTaskComplete ? { thinking: false } : {}),
                     ...(shouldInferLifecycle && isTaskStarted && shouldApplyLifecycleStatus ? { thinking: true } : {}),
-                    ...(shouldApplyLifecycleStatus ? {
+                    ...(shouldApplyLifecycleStatus && !isTurnProjectionOwnedByServer(sessionForApply) ? {
                         latestTurnStatus,
                         latestTurnStatusObservedAt: lifecycleEvent?.createdAt ?? updateData.createdAt,
                     } : {}),

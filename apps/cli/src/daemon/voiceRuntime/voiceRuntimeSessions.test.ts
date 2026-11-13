@@ -161,4 +161,41 @@ describe('voice runtime sessions', () => {
     expect(await manager.stop('call-7')).toEqual({ ok: true });
     expect(pids.some(isAlive)).toBe(false);
   });
+
+  it('does not start a runtime whose stop arrived first', async () => {
+    // A stop can overtake its start on a different route; the late start must not spawn a runtime
+    // that nothing would stop.
+    const manager = managerFor('answer');
+    expect(await manager.stop('call-8')).toMatchObject({ ok: false, errorCode: 'voice_runtime_not_found' });
+    expect(await manager.start(request('call-8'))).toMatchObject({
+      ok: false,
+      errorCode: 'voice_runtime_start_failed',
+      runtimeCode: 'stopped',
+    });
+    expect(pids).toHaveLength(0);
+  });
+
+  // A stop for a runtime that already ended is that call's normal hang-up, not a stop that overtook
+  // its start: it leaves nothing behind (observable here as the key staying startable).
+  it('leaves no stop mark for a runtime that refused to start', async () => {
+    const manager = managerFor('error');
+    await manager.start(request('call-9'));
+    expect(await manager.stop('call-9')).toMatchObject({ ok: false, errorCode: 'voice_runtime_not_found' });
+    expect(await manager.start(request('call-9'))).toMatchObject({ ok: false, runtimeCode: 'invalid_config' });
+  });
+
+  it('leaves no stop mark for a runtime that ended by itself', async () => {
+    const manager = managerFor('answer');
+    expect(await manager.start(request('call-10'))).toMatchObject({ ok: true });
+    const pid = pids[pids.length - 1]!;
+    process.kill(pid, 'SIGTERM');
+    await new Promise<void>((resolve) => {
+      const check = () => (isAlive(pid) ? setTimeout(check, 10) : resolve());
+      check();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await manager.stop('call-10')).toMatchObject({ ok: false, errorCode: 'voice_runtime_not_found' });
+    expect(await manager.start(request('call-10'))).toMatchObject({ ok: true });
+    await manager.stop('call-10');
+  });
 });

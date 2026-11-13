@@ -1,3 +1,4 @@
+import { getActiveServerSnapshot } from '@/sync/domains/server/serverRuntime';
 import { storage } from '@/sync/domains/state/storage';
 import { machineVoiceRuntimeStart, machineVoiceRuntimeStop } from '@/sync/ops/machineVoiceRuntime';
 import { isRpcMethodNotAvailableError, isRpcMethodNotFoundError } from '@/sync/runtime/rpcErrors';
@@ -44,9 +45,18 @@ type Connection = {
   readonly abort: AbortController;
   /** Speaks only into this call: once it ends, its remaining reply is dropped, never sent to the next. */
   readonly speechOutput: VoiceSpeechOutput;
+  /** Where the runtime runs. Start and stop both go there, even if the active server changes mid-call. */
   machineId: string | null;
+  serverId: string | null;
   /** The start request was emitted (the transport fences one that was not), so a runtime may exist. */
   startIssued: boolean;
+  /**
+   * Its one stop was sent. The daemon refuses a start whose stop arrived first, so one stop per
+   * issued start is enough, and a second would leave a mark for a key the daemon already settled.
+   */
+  stopSent: boolean;
+  /** This call's place in `callGeneration`: a newer call has started when they differ. */
+  readonly generation: number;
 };
 
 /** Ends a start whose call was stopped (or replaced) while it awaited something. */
@@ -74,6 +84,10 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
   let userSpeaking = false;
   let botSpeaking = false;
   let snapshot: VoiceSessionSnapshot | null = null;
+  /** Counts call starts, so a late stop result can tell whether a newer call has begun after its call. */
+  let callGeneration = 0;
+  /** The previous call's local cleanup; a new call waits for it so that cleanup cannot reset it. */
+  let localTeardown: Promise<void> | null = null;
   const noCallSpeechOutput = createPipecatSpeechOutput(() => null);
 
   const computeSnapshot = (): VoiceSessionSnapshot => {
@@ -118,17 +132,22 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
     for (const listener of [...listeners]) listener();
   };
 
-  const releaseRuntime = (current: Connection) => {
+  /**
+   * Stops the call's runtime on the machine. A stop the daemon could not confirm (it keeps tracking
+   * the runtime) or never answered means the runtime may still be running, so it is shown as an error
+   * instead of a clean hang-up, unless a newer call has started since: its state is not this call's.
+   */
+  const releaseRuntime = async (current: Connection): Promise<void> => {
     const machineId = current.machineId;
-    if (!machineId || !current.startIssued) return;
-    fireAndForget((async () => {
-      const result = await machineVoiceRuntimeStop(machineId, current.sessionKey);
-      // The daemon keeps a runtime it could not confirm stopped; say so instead of a clean hang-up.
-      if (!result.ok && result.errorCode === 'voice_runtime_stop_failed') {
-        patchLocalVoiceState({ error: 'voice_runtime_stop_failed', errorMessage: null });
-        notify();
-      }
-    })(), { tag: 'realtimePipecat.stop' });
+    if (!machineId || !current.startIssued || current.stopSent) return;
+    current.stopSent = true;
+    const confirmed = await machineVoiceRuntimeStop(machineId, current.sessionKey, { serverId: current.serverId }).then(
+      (result) => result.ok || result.errorCode !== 'voice_runtime_stop_failed',
+      () => false,
+    );
+    if (confirmed || current.generation !== callGeneration) return;
+    patchLocalVoiceState({ error: 'voice_runtime_stop_failed', errorMessage: null });
+    notify();
   };
 
   const disconnect = async () => {
@@ -137,14 +156,27 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
     connecting = false;
     userSpeaking = false;
     botSpeaking = false;
-    if (current) {
-      current.abort.abort();
-      releaseRuntime(current);
-    }
+    current?.abort.abort();
     client?.close();
     client = null;
-    await stopLocalVoiceSession();
-    notify();
+    // Local cleanup resets the voice state, so the stop's outcome is published after it.
+    // One cleanup at a time: an overlapping hang-up (a second tap, the runtime reporting the
+    // disconnect) and the next call all wait for the one already running.
+    let teardown = localTeardown;
+    if (!teardown) {
+      const running: Promise<void> = stopLocalVoiceSession().finally(() => {
+        if (localTeardown === running) localTeardown = null;
+      });
+      localTeardown = running;
+      teardown = running;
+    }
+    try {
+      await teardown;
+      notify();
+    } finally {
+      // The call has ended locally either way; its runtime is released even if local cleanup failed.
+      if (current) await releaseRuntime(current);
+    }
   };
 
   const onRuntimeEvent = (owner: Connection, event: PipecatRuntimeEvent) => {
@@ -196,6 +228,10 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
 
   const start = async (opts: Readonly<{ sessionId: string; initialContext?: string }>) => {
     if (connection) return;
+    if (localTeardown) {
+      await localTeardown.catch(() => undefined);
+      if (connection) return;
+    }
     const settings: any = storage.getState().settings;
     const cfg = settings?.voicePipecat ?? {};
     const conversationMode = settings?.voice?.adapters?.local_conversation?.conversationMode ?? 'direct_session';
@@ -206,12 +242,16 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
     const owner: Connection = {
       controlSessionId,
       machineId: null,
+      serverId: null,
       startIssued: false,
+      stopSent: false,
+      generation: callGeneration + 1,
       sessionKey: `pipecat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
       abort: new AbortController(),
       speechOutput: createPipecatSpeechOutput(() => (connection === owner ? client : null)),
     };
     connection = owner;
+    callGeneration = owner.generation;
     connecting = true;
     patchLocalVoiceState({ status: 'idle', sessionId: controlSessionId, error: null, errorMessage: null });
     notify();
@@ -232,6 +272,8 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
       const resolvedMachineId = await resolveMachineId(controlSessionId, conversationMode === 'agent' ? requestedSessionId : null);
       throwIfEnded(owner);
       owner.machineId = resolvedMachineId;
+      // The session's machine was read from the active server's state, so that server hosts it.
+      owner.serverId = normalizeNonEmptyString(getActiveServerSnapshot().serverId);
       const timeoutMs = resolveVoiceNetworkTimeoutMs(settings?.voice?.adapters?.local_conversation?.networkTimeoutMs, 15_000);
       const connected = await connectPipecatRuntime({
         platform,
@@ -254,6 +296,7 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
               offer: { type: 'offer', sdp: offerSdp },
             },
             {
+              serverId: owner.serverId,
               timeoutMs,
               onIssued: () => {
                 owner.startIssued = true;
@@ -266,7 +309,7 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
       });
       if (connection !== owner) {
         connected.close();
-        releaseRuntime(owner);
+        fireAndForget(releaseRuntime(owner), { tag: 'realtimePipecat.stop' });
         return;
       }
       client = connected;
@@ -275,7 +318,7 @@ export function createRealtimePipecatVoiceAdapter(): VoiceAdapterController {
     } catch (error) {
       // Once a start was requested a runtime may exist or still be coming up on the machine, even
       // after a stop: the stop can reach the daemon before the start and find nothing to stop.
-      releaseRuntime(owner);
+      fireAndForget(releaseRuntime(owner), { tag: 'realtimePipecat.stop' });
       if (connection !== owner) return;
       connection = null;
       connecting = false;

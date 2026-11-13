@@ -234,4 +234,85 @@ describe('voice reply binding through the real transcript store', () => {
     publish(turns('voice', 'completed', [12], 13), [user('u1', 'voice-input', 12), agent('a1', 'Your answer.', 13)]);
     await expect(waiting).resolves.toBe('Your answer.');
   });
+
+  // Unanchored producers (Claude) commit transcript text on a best-effort lane that turn lifecycle
+  // writes do not wait for, so a turn's completion can reach the client before its reply. The
+  // producer's ready event follows the reply on that same lane.
+  function publishUnanchored(turnId: string, status: 'completed' | 'cancelled' | 'failed', messages: Message[], latestReadyEventSeq: number | null = null) {
+    const now = Date.now();
+    storage.setState({
+      sessions: { s1: createSessionFixture({
+        id: 's1', active: true, activeAt: now,
+        latestTurnId: turnId, latestTurnStatus: status, latestTurnStatusObservedAt: now,
+      }) },
+      sessionMessages: { s1: createSessionMessagesFixture({
+        messageIdsOldestFirst: messages.map((message) => message.id),
+        messagesById: Object.fromEntries(messages.map((message) => [message.id, message])),
+        latestReadyEventSeq,
+      }) },
+    });
+  }
+
+  it('waits for the reply of a completed unanchored turn that arrives after its completion', async () => {
+    publishUnanchored('turn-0', 'completed', [], 5);
+    const baseline = captureSessionTurnBaseline('s1');
+    let settled: string | null | undefined;
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    }).then((text) => { settled = text; return text; });
+    publishUnanchored('turn-voice', 'completed', [user('u1', 'voice-input', 7)], 5);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBeUndefined();
+    publishUnanchored('turn-voice', 'completed', [user('u1', 'voice-input', 7), agent('a1', 'Your answer.', 8)], 9);
+    await expect(waiting).resolves.toBe('Your answer.');
+  });
+
+  it('ends a completed unanchored turn without a reply once the producer reports ready', async () => {
+    publishUnanchored('turn-0', 'completed', [], 5);
+    const baseline = captureSessionTurnBaseline('s1');
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    });
+    publishUnanchored('turn-voice', 'completed', [user('u1', 'voice-input', 7)], 8);
+    await expect(waiting).resolves.toBeNull();
+  });
+
+  it('does not take a newer turn\'s reply when the completed unanchored turn\'s reply never arrived', async () => {
+    publishUnanchored('turn-0', 'completed', [], 5);
+    const baseline = captureSessionTurnBaseline('s1');
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    });
+    publishUnanchored('turn-voice', 'completed', [user('u1', 'voice-input', 7)], 5);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    // Queued work suppresses the ready event, and the next turn runs and answers.
+    publishUnanchored('turn-next', 'completed', [user('u1', 'voice-input', 7), user('u2', 'queued', 8), agent('a2', 'Queued answer.', 9)], 5);
+    await expect(waiting).resolves.toBeNull();
+  });
+
+  it('does not take a newer turn\'s reply on a status-only turn projection either', async () => {
+    // Servers publishing only the turn status (no turn id) mark each turn by its observation time.
+    const publishStatusOnly = (observedAt: number, messages: Message[]) => {
+      storage.setState({
+        sessions: { s1: createSessionFixture({
+          id: 's1', active: true, activeAt: observedAt,
+          latestTurnId: null, latestTurnStatus: 'completed', latestTurnStatusObservedAt: observedAt,
+        }) },
+        sessionMessages: { s1: createSessionMessagesFixture({
+          messageIdsOldestFirst: messages.map((message) => message.id),
+          messagesById: Object.fromEntries(messages.map((message) => [message.id, message])),
+          latestReadyEventSeq: 5,
+        }) },
+      });
+    };
+    publishStatusOnly(100, []);
+    const baseline = captureSessionTurnBaseline('s1');
+    const waiting = waitForTurnFinalAssistantText({
+      sessionId: 's1', baseline, signal: abort.signal, submittedUserLocalId: 'voice-input',
+    });
+    publishStatusOnly(200, [user('u1', 'voice-input', 7)]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    publishStatusOnly(300, [user('u1', 'voice-input', 7), user('u2', 'queued', 8), agent('a2', 'Queued answer.', 9)]);
+    await expect(waiting).resolves.toBeNull();
+  });
 });

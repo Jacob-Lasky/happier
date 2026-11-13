@@ -792,6 +792,43 @@ describe('handleNewMessageSocketUpdate', () => {
         });
     });
 
+    it('leaves the turn projection to the server once it has published one', async () => {
+        // A transcript lifecycle row has no turn id. Stamping its time onto a server projection made
+        // the server's own, slightly earlier, updates for the new turn look stale, so the new turn id
+        // was dropped and the session stayed on the previous turn (live W330 trace, 2026-11-12).
+        const { params, applySessions } = buildHarness({
+            getSession: () => ({
+                ...buildSession('s1'),
+                updatedAt: 900,
+                thinking: false,
+                latestTurnId: 'turn-1',
+                latestTurnStatus: 'completed',
+                latestTurnStatusObservedAt: 900,
+            }),
+            getSessionEncryption: () => ({
+                decryptMessage: async () => ({
+                    id: 'm2',
+                    localId: null,
+                    createdAt: 1_000,
+                    content: {
+                        role: 'agent',
+                        content: {
+                            type: 'acp',
+                            provider: 'claude',
+                            data: { type: 'task_started', id: 'task_2' },
+                        },
+                    },
+                }),
+            }),
+        });
+
+        await handleNewMessageSocketUpdate(params);
+
+        const applied = applySessions.mock.calls[0]?.[0]?.[0];
+        expect(applied).toMatchObject({ id: 's1', thinking: true, latestTurnId: 'turn-1', latestTurnStatus: 'completed' });
+        expect(applied?.latestTurnStatusObservedAt).toBe(900);
+    });
+
     it('applies terminal lifecycle messages as completed primary turn projections', async () => {
         const { params, applySessions } = buildHarness({
             getSession: () => ({

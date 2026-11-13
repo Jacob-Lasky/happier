@@ -49,6 +49,22 @@ export function createVoiceRuntimeSessionManager(deps: Readonly<{
     await killProcessTree(child);
   });
   const sessions = new Map<string, ChildProcessWithoutNullStreams>();
+  /**
+   * The app sends exactly one stop for every start it issued, and a start and its stop can take
+   * different routes, so the stop can arrive first. These two sets tell a stop that overtook its
+   * start (the late start must then not spawn a runtime nothing would stop) from the normal hang-up
+   * of a runtime that already ended. Each entry is consumed by the call's other half; only a call
+   * whose other half never arrives (a start lost in transit, an app gone before hanging up) leaves
+   * its key behind, a short string for the daemon's lifetime.
+   */
+  const endedAwaitingStop = new Set<string>();
+  const stoppedBeforeStart = new Set<string>();
+
+  const forget = (sessionKey: string, child: ChildProcessWithoutNullStreams) => {
+    if (sessions.get(sessionKey) !== child) return;
+    sessions.delete(sessionKey);
+    endedAwaitingStop.add(sessionKey);
+  };
 
   /** True once the runtime is gone. False keeps it tracked, so a later stop can try again. */
   const terminate = async (child: ChildProcessWithoutNullStreams): Promise<boolean> => {
@@ -64,9 +80,14 @@ export function createVoiceRuntimeSessionManager(deps: Readonly<{
 
   const stop = async (sessionKey: string): Promise<DaemonVoiceRuntimeStopResponse> => {
     const child = sessions.get(sessionKey);
-    if (!child) return failure('voice_runtime_not_found');
+    if (!child) {
+      if (!endedAwaitingStop.delete(sessionKey)) stoppedBeforeStart.add(sessionKey);
+      return failure('voice_runtime_not_found');
+    }
     if (!(await terminate(child))) return failure('voice_runtime_stop_failed');
     if (sessions.get(sessionKey) === child) sessions.delete(sessionKey);
+    // Its exit may already have recorded it as ended; this stop is that call's other half.
+    endedAwaitingStop.delete(sessionKey);
     return { ok: true };
   };
 
@@ -78,6 +99,7 @@ export function createVoiceRuntimeSessionManager(deps: Readonly<{
     // it (rather than replacing the runtime) leaves exactly one owner per key with no await between
     // this check and claiming the key below.
     if (sessions.has(request.sessionKey)) return failure('voice_runtime_invalid_request');
+    if (stoppedBeforeStart.delete(request.sessionKey)) return failure('voice_runtime_start_failed', 'stopped');
 
     let child: ChildProcessWithoutNullStreams;
     try {
@@ -112,9 +134,7 @@ export function createVoiceRuntimeSessionManager(deps: Readonly<{
       child.once('exit', () => resolve(failure('voice_runtime_start_failed', 'exited')));
     });
 
-    child.once('exit', () => {
-      if (sessions.get(request.sessionKey) === child) sessions.delete(request.sessionKey);
-    });
+    child.once('exit', () => forget(request.sessionKey, child));
 
     // The runtime's config is snake_case (Python); the wire request is the protocol's camelCase.
     const { credential, stt, tts, iceServers } = request.config;
@@ -128,7 +148,7 @@ export function createVoiceRuntimeSessionManager(deps: Readonly<{
 
     const reply = await firstReply;
     if (!reply.ok && sessions.get(request.sessionKey) === child && (await terminate(child))) {
-      sessions.delete(request.sessionKey);
+      forget(request.sessionKey, child);
     }
     return reply;
   };
